@@ -43,7 +43,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             };
 
             // 2. Call DB Service
-            // This will now THROW if the DB write fails, preventing false success
             await dbService.registerUser(newUser, password);
             
             // 3. Log in automatically after register
@@ -68,13 +67,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setIsLoading(false);
         console.error("Auth Error:", err);
         
+        const errorMsg = err.message || JSON.stringify(err);
+
         // Detailed error for common SQLiteCloud issues
-        if (err.message?.includes('UNIQUE constraint failed')) {
+        if (errorMsg.includes('UNIQUE constraint failed')) {
              setError('Este email já está cadastrado. Tente fazer login.');
-        } else if (err.message?.includes('Network Error') || err.message?.includes('fetch')) {
+        } else if (errorMsg.includes('Network Error') || errorMsg.includes('fetch')) {
              setError('Erro de conexão com o servidor. Verifique sua internet.');
         } else {
-             setError('Ocorreu um erro ao salvar no banco de dados. Tente novamente.');
+             // Show actual DB error
+             setError(`Erro no Banco de Dados: ${errorMsg}`);
         }
     }
   };
@@ -97,7 +99,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold">
+            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold break-words">
               {error}
             </div>
           )}
