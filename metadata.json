@@ -1,0 +1,9 @@
+{
+  "name": "FUT-DOMINATION",
+  "description": "A social territory domination platform for amateur soccer teams. Win matches, conquer neighborhoods, and manage your fan club.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
