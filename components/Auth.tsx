@@ -34,11 +34,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setIsLoading(false);
         // Remove password before passing user data to app state
         const { password, ...safeUser } = foundUser;
-        
-        // If it's an Owner without a team (hypothetically), we might show subscription,
-        // but for this demo, we assume owners have teams or go straight in.
-        // You could add logic here: if (safeUser.role === UserRole.OWNER && !safeUser.subscriptionActive) ...
-        
         onLogin(safeUser as User);
       } else {
         setIsLoading(false);
@@ -49,17 +44,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   // Helper to fill credentials for demo purposes
   const fillDemo = (role: string) => {
-    if (role === 'owner') { setEmail('dono@fut.com'); setPassword('123'); }
-    if (role === 'player') { setEmail('goleiro@fut.com'); setPassword('123'); }
-    if (role === 'fan') { setEmail('torcedor@fut.com'); setPassword('123'); }
+    if (role === 'owner') { setEmail('admin@fut.com'); setPassword('123'); }
     setError('');
   };
 
-  // --- Renders ---
-
-  // Subscription screen could be kept if you want a registration flow, 
-  // but for "Login into account X", we mostly need the form.
-  
   return (
     <div className="min-h-screen bg-pitch-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -71,7 +59,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <h1 className="text-5xl font-display font-bold text-white mb-2 tracking-wider">
             FUT<span className="text-neon">-DOMINATION</span>
           </h1>
-          <p className="text-pitch-300">Conquiste o campo. Domine seu bairro.</p>
+          <p className="text-pitch-300">Banco de Dados: Limpo</p>
         </div>
 
         <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -111,25 +99,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           >
             {isLoading ? (
                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-            ) : 'Entrar no Vestiário'}
+            ) : 'Iniciar Novo Jogo'}
           </button>
         </form>
 
         {/* Demo Helper - Useful for the user to test hierarchies */}
         <div className="mt-8 border-t border-pitch-800 pt-6">
-          <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Contas de Teste (Clique para preencher)</p>
+          <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Acesso Inicial</p>
           <div className="flex gap-2 justify-center">
              <button onClick={() => fillDemo('owner')} className="bg-pitch-800 hover:bg-pitch-700 text-gold text-xs px-3 py-2 rounded-lg border border-gold/20">
-               👑 Dono
-             </button>
-             <button onClick={() => fillDemo('player')} className="bg-pitch-800 hover:bg-pitch-700 text-blue-400 text-xs px-3 py-2 rounded-lg border border-blue-400/20">
-               ⚽ Jogador
-             </button>
-             <button onClick={() => fillDemo('fan')} className="bg-pitch-800 hover:bg-pitch-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-500/20">
-               🎫 Torcedor
+               👑 Admin Inicial
              </button>
           </div>
-          <p className="text-center text-gray-600 text-[10px] mt-2">Senha para todos: 123</p>
+          <p className="text-center text-gray-600 text-[10px] mt-2">Senha: 123</p>
         </div>
       </div>
     </div>

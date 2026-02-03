@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Team, UserRole } from '../types';
 
 interface TeamManagementProps {
@@ -10,6 +10,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
   const maxPlayers = 22;
   const currentPlayers = team.players.length;
   const isOwner = currentUserRole === UserRole.OWNER;
+
+  // Editing State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [teamName, setTeamName] = useState(team.name);
+
+  const handleSaveName = () => {
+    // In a real app, this would make an API call. 
+    // Here we update the local object reference for the session.
+    team.name = teamName;
+    setIsEditingName(false);
+  };
 
   return (
     <div className="space-y-8 pb-24">
@@ -30,7 +41,38 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                <img src={team.logoUrl} alt={team.name} className="relative w-full h-full rounded-full object-cover border-4 border-black bg-black" />
             </div>
             
-            <h2 className="text-5xl font-display font-bold text-white uppercase italic tracking-wide mb-2 text-glow">{team.name}</h2>
+            {/* Editable Name Section */}
+            <div className="mb-2 w-full flex justify-center items-center gap-2">
+                {isEditingName ? (
+                    <div className="flex gap-2 animate-[fadeIn_0.2s]">
+                        <input 
+                            type="text" 
+                            value={teamName}
+                            onChange={(e) => setTeamName(e.target.value)}
+                            className="bg-white/10 border border-neon/50 rounded-lg px-4 py-2 text-3xl font-display font-bold text-white uppercase text-center focus:outline-none focus:ring-2 focus:ring-neon w-full max-w-xs"
+                            autoFocus
+                        />
+                        <button onClick={handleSaveName} className="bg-neon text-black rounded-lg p-2 hover:scale-105 transition-transform">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-3 group/name">
+                        <h2 className="text-5xl font-display font-bold text-white uppercase italic tracking-wide text-glow">
+                            {teamName}
+                        </h2>
+                        {isOwner && (
+                            <button 
+                                onClick={() => setIsEditingName(true)} 
+                                className="opacity-0 group-hover/name:opacity-100 transition-opacity bg-white/10 p-2 rounded-full hover:bg-white/20"
+                                title="Editar Nome do Time"
+                            >
+                                <svg className="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
             
             <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
                <span className="bg-white/5 backdrop-blur-md px-4 py-1 rounded-full text-xs font-bold text-neon border border-neon/30 shadow-[0_0_10px_rgba(57,255,20,0.1)] uppercase tracking-widest">Liga {team.category}</span>
@@ -40,7 +82,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                </span>
             </div>
             
-            {/* Stats Grid */}
+            {/* Stats Grid - ZERO STATE */}
             <div className="grid grid-cols-3 w-full max-w-sm gap-0 border border-white/10 rounded-2xl bg-white/5 backdrop-blur overflow-hidden divide-x divide-white/10">
                <div className="flex flex-col py-4 hover:bg-white/5 transition-colors">
                   <span className="text-3xl font-display font-bold text-white">{team.wins}</span>
@@ -56,14 +98,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                </div>
             </div>
          </div>
-         
-         {isOwner && (
-             <div className="absolute top-6 right-6">
-                 <button className="bg-white/10 backdrop-blur-md p-3 rounded-full text-white hover:bg-white/20 border border-white/10 transition-colors">
-                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                 </button>
-             </div>
-         )}
       </div>
 
       {/* Roster Section */}
@@ -99,7 +133,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                      <div className="flex-1">
                          <h4 className="text-white font-bold tracking-wide group-hover:text-neon transition-colors">{player.name}</h4>
                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-[10px] text-gray-400 uppercase bg-black/40 px-2 py-0.5 rounded">Atacante</span>
+                            <span className="text-[10px] text-gray-400 uppercase bg-black/40 px-2 py-0.5 rounded">
+                                {player.role === UserRole.OWNER ? 'Capitão' : 'Jogador'}
+                            </span>
                          </div>
                      </div>
                      
@@ -124,7 +160,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       <div className="glass-card p-8 rounded-[2rem] flex items-center justify-between relative overflow-hidden group">
           <div className="relative z-10">
               <h3 className="text-white font-display font-bold text-2xl uppercase italic">Uniforme Oficial</h3>
-              <p className="text-gray-400 text-xs mb-4 max-w-[150px]">Garanta a camisa autêntica do Neon FC e apoie seu território local.</p>
+              <p className="text-gray-400 text-xs mb-4 max-w-[150px]">Garanta a camisa autêntica do {teamName} e apoie seu território local.</p>
               <button className="text-xs bg-white text-black font-bold px-6 py-2.5 rounded-xl hover:bg-gray-200 transition-colors">LOJA EM BREVE</button>
           </div>
           <div className="w-32 h-32 bg-gradient-to-br from-neon to-black rounded-2xl shadow-neon rotate-12 transform group-hover:rotate-6 transition-transform duration-500 flex items-center justify-center border border-white/10">
