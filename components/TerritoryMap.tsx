@@ -13,16 +13,24 @@ const createCustomIcon = (team: Team | undefined, territoryPoints: number) => {
   const color = team ? team.territoryColor : '#64748b'; // Default gray
   const logo = team?.logoUrl || 'https://www.svgrepo.com/show/530412/shield.svg';
   
-  // Larger, glowing marker for owned territories
+  // Larger, glowing marker for owned territories with "Conquest" animation (Ping)
   return L.divIcon({
     className: 'custom-marker',
     html: `
-      <div class="relative w-12 h-12">
-        <div class="absolute inset-0 bg-[${color}] rounded-full opacity-30 animate-pulse-slow blur-md"></div>
-        <div class="relative w-12 h-12 rounded-full border-2 border-[${color}] bg-black overflow-hidden shadow-[0_0_15px_${color}] flex items-center justify-center group hover:scale-110 transition-transform duration-300">
+      <div class="relative w-12 h-12 flex items-center justify-center">
+        <!-- Conquest Animation: Radiating Ping Effect -->
+        ${team ? `<div class="absolute inset-0 rounded-full opacity-75 animate-ping" style="background-color: ${color}"></div>` : ''}
+        
+        <!-- Static Glow background -->
+        <div class="absolute inset-0 rounded-full opacity-30 blur-md" style="background-color: ${color}"></div>
+        
+        <!-- Main Marker Container -->
+        <div class="relative w-12 h-12 rounded-full border-2 bg-black overflow-hidden flex items-center justify-center group hover:scale-110 transition-transform duration-300 z-10" style="border-color: ${color}; box-shadow: 0 0 15px ${color}">
            ${team ? `<img src="${logo}" class="w-full h-full object-cover opacity-90" />` : `<span class="text-xl">🏳️</span>`}
         </div>
-        <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/80 text-[${color}] text-[10px] font-bold px-2 py-0.5 rounded border border-[${color}] backdrop-blur-sm whitespace-nowrap">
+        
+        <!-- Points Badge -->
+        <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/90 text-[10px] font-bold px-2 py-0.5 rounded border backdrop-blur-sm whitespace-nowrap z-20" style="color: ${color}; border-color: ${color}">
           ${territoryPoints} PTS
         </div>
       </div>

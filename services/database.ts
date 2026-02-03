@@ -1,14 +1,13 @@
 import { Database } from '@sqlitecloud/drivers';
 import { Team, Territory, Post, User, Match, UserRole } from '../types';
 
-// Fallback Hardcoded String
+// Fallback Hardcoded String - Updated to match user provided string exactly
 const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:8860/FUT_DOM.db?apikey=CCfQtOyo5qbyni96cUwEdIG4q2MRcEXpRHGoNpELtNc";
 
 // NOTE: Uses the connection string from vite.config.ts (process.env) or the fallback
 const connectionString = process.env.SQLITE_CONNECTION_STRING || FALLBACK_CONNECTION_STRING;
 
 // Use namespaced tables to avoid conflicts with old/broken schemas
-// Bumped to v2 to ensure fresh tables after fixing the binding parameter bug
 const TABLES = {
     USERS: 'app_users_v2',
     TEAMS: 'app_teams_v2',
@@ -20,8 +19,13 @@ class DatabaseService {
   private db: Database | null = null;
 
   constructor() {
+    this.initClient();
+  }
+
+  private initClient() {
     if (connectionString) {
       try {
+        // Create a new instance.
         this.db = new Database(connectionString);
         console.log("🔌 Database Client Initialized.");
       } catch (error) {
@@ -93,7 +97,7 @@ class DatabaseService {
       for (const sql of queries) {
           try {
               // Schema init uses direct execution without params
-              await this.db.sql(sql);
+              await this.query(sql); // Use query method to benefit from retry logic
           } catch (e) {
               console.log("⚠️ Schema info:", e);
           }
@@ -101,20 +105,41 @@ class DatabaseService {
       console.log("✅ Schema Verified.");
   }
 
-  async query(sql: string, params: any[] = []) {
+  async query(sql: string, params: any[] = [], retries = 3) {
     if (!this.db) {
-      throw new Error("Banco de dados não inicializado.");
+        this.initClient();
+        if (!this.db) throw new Error("Banco de dados não inicializado.");
     }
+
     try {
       // FIX: Handle undefined values by converting to null
       const safeParams = params.map(p => p === undefined ? null : p);
       
       // CRITICAL FIX: Spread the arguments. 
-      // The driver expects: db.sql(query, arg1, arg2, ...)
-      // Passing an array as the second argument counts as 1 parameter, causing "Wrong number of parameters" error.
       const result = await this.db.sql(sql, ...safeParams);
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      const errorMsg = (error?.message || String(error)).toLowerCase();
+      
+      // Retry Logic for Connection Issues
+      // Explicitly check for 'unavailable' which was the reported error
+      if (retries > 0 && (
+          errorMsg.includes('disconnected') || 
+          errorMsg.includes('connection') || 
+          errorMsg.includes('connect') ||
+          errorMsg.includes('unavailable')
+      )) {
+          console.warn(`⚠️ Database connection error: ${errorMsg}. Retrying... (${retries} attempts left)`);
+          
+          // Force re-initialization
+          this.initClient();
+          
+          // Increased delay to 1.5s to allow socket recovery
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          return this.query(sql, params, retries - 1);
+      }
+
       console.error("❌ Database Query Error:", error, "SQL:", sql);
       throw error; 
     }
