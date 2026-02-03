@@ -8,11 +8,12 @@ const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:886
 const connectionString = process.env.SQLITE_CONNECTION_STRING || FALLBACK_CONNECTION_STRING;
 
 // Use namespaced tables to avoid conflicts with old/broken schemas
+// Bumped to v2 to ensure fresh tables after fixing the binding parameter bug
 const TABLES = {
-    USERS: 'app_users_v1',
-    TEAMS: 'app_teams_v1',
-    MATCHES: 'app_matches_v1',
-    TERRITORIES: 'app_territories_v1'
+    USERS: 'app_users_v2',
+    TEAMS: 'app_teams_v2',
+    MATCHES: 'app_matches_v2',
+    TERRITORIES: 'app_territories_v2'
 };
 
 class DatabaseService {
@@ -91,6 +92,7 @@ class DatabaseService {
 
       for (const sql of queries) {
           try {
+              // Schema init uses direct execution without params
               await this.db.sql(sql);
           } catch (e) {
               console.log("⚠️ Schema info:", e);
@@ -104,9 +106,13 @@ class DatabaseService {
       throw new Error("Banco de dados não inicializado.");
     }
     try {
-      // @sqlitecloud/drivers typically accepts params as separate arguments or an array depending on usage.
-      // Passing array as second argument is standard for this wrapper.
-      const result = await this.db.sql(sql, params);
+      // FIX: Handle undefined values by converting to null
+      const safeParams = params.map(p => p === undefined ? null : p);
+      
+      // CRITICAL FIX: Spread the arguments. 
+      // The driver expects: db.sql(query, arg1, arg2, ...)
+      // Passing an array as the second argument counts as 1 parameter, causing "Wrong number of parameters" error.
+      const result = await this.db.sql(sql, ...safeParams);
       return result;
     } catch (error) {
       console.error("❌ Database Query Error:", error, "SQL:", sql);
