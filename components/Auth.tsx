@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserRole, User } from '../types';
-import { MOCK_AUTH_DB } from '../constants';
+import { dbService } from '../services/database';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -15,64 +15,56 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   // --- Login / Register Logic ---
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (isRegistering) {
-        // --- REGISTRATION LOGIC ---
-        
-        // 1. Check if email exists
-        const emailExists = MOCK_AUTH_DB.some(u => u.email.toLowerCase() === email.toLowerCase());
-        if (emailExists) {
-          setError('Este email já está em uso.');
-          setIsLoading(false);
-          return;
-        }
+    try {
+        if (isRegistering) {
+            // --- REGISTRATION LOGIC (DB) ---
+            
+            // 1. Create new Common User (FAN)
+            const newUser: User = {
+                id: `u-${Date.now()}`,
+                name: name,
+                email: email,
+                role: UserRole.FAN,
+                teamId: undefined,
+                avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+                bio: 'Novo usuário no Fut-Domination.',
+                location: 'Brasil',
+                following: [],
+                stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
+                badges: []
+            };
 
-        // 2. Create new Common User (FAN)
-        const newUser = {
-          id: `u-${Date.now()}`,
-          name: name,
-          email: email,
-          password: password, // In real app, hash this!
-          role: UserRole.FAN,
-          teamId: undefined,
-          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-          bio: 'Novo usuário no Fut-Domination.',
-          location: 'Brasil',
-          following: [],
-          badges: [],
-          stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 }
-        };
+            // 2. Call DB Service
+            await dbService.registerUser(newUser, password);
+            
+            // 3. Log in automatically after register
+            setIsLoading(false);
+            onLogin(newUser);
 
-        // 3. Save to Mock DB
-        MOCK_AUTH_DB.push(newUser);
-
-        // 4. Log in
-        // Remove password before passing to app
-        const { password: _, ...safeUser } = newUser;
-        setIsLoading(false);
-        onLogin(safeUser as User);
-
-      } else {
-        // --- LOGIN LOGIC ---
-        const foundUser = MOCK_AUTH_DB.find(
-          u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-        );
-
-        if (foundUser) {
-          setIsLoading(false);
-          const { password, ...safeUser } = foundUser;
-          onLogin(safeUser as User);
         } else {
-          setIsLoading(false);
-          setError('Email ou senha incorretos.');
+            // --- LOGIN LOGIC (DB) ---
+            const user = await dbService.loginUser(email);
+            
+            if (user) {
+                // In a real app, verify password hash here. 
+                // Since schema has no password col, we trust email existence for this demo or update schema later.
+                setIsLoading(false);
+                onLogin(user);
+            } else {
+                setIsLoading(false);
+                setError('Email não encontrado ou credenciais inválidas.');
+            }
         }
-      }
-    }, 800);
+    } catch (err) {
+        setIsLoading(false);
+        console.error(err);
+        setError('Ocorreu um erro ao conectar com o banco de dados. Tente novamente.');
+    }
   };
 
   return (

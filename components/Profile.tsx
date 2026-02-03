@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Match, UserRole } from '../types';
-import { MOCK_TEAMS, MOCK_AUTH_DB } from '../constants';
+import { MOCK_TEAMS } from '../constants';
+import { dbService } from '../services/database';
 
 interface ProfileProps {
   user: User;
@@ -13,7 +14,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
   const [createError, setCreateError] = useState('');
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
 
-  const handleCreateTeam = () => {
+  const handleCreateTeam = async () => {
     setCreateError('');
     
     if (!newTeamName.trim()) {
@@ -26,7 +27,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
         return;
     }
 
-    // UNIQUE CHECK
+    // UNIQUE CHECK (Using Local Mock + DB Check ideally, but assuming Mock list is updated for now or relying on DB constraint catch)
     const nameExists = MOCK_TEAMS.some(t => t.name.toLowerCase() === newTeamName.trim().toLowerCase());
     if (nameExists) {
         setCreateError('Este nome de time já existe. Escolha outro.');
@@ -35,8 +36,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
 
     setIsCreatingTeam(true);
 
-    // Simulate API Call
-    setTimeout(() => {
+    try {
         const newTeamId = `t-${Date.now()}`;
         
         // 1. Create New Team Object
@@ -50,24 +50,28 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
             territoryColor: '#ffffff', // User can change later
             players: [user], // Owner is first player
             ownerId: user.id,
-            category: 'Society', // Default
+            category: 'Society' as const, // Default
             homeTurf: 'Sem Local'
         };
 
-        // 2. Add to Mock Database
-        // @ts-ignore
-        MOCK_TEAMS.push(newTeam);
-
-        // 3. Update User Role and Link
-        // We modify the object in MOCK_AUTH_DB to ensure persistence during this session
-        const dbUser = MOCK_AUTH_DB.find(u => u.id === user.id);
-        if (dbUser) {
-            dbUser.role = UserRole.OWNER;
-            dbUser.teamId = newTeamId;
-            dbUser.badges?.push('👑 Fundador');
+        // 2. Save to Real Database
+        const teamCreated = await dbService.createTeam(newTeam);
+        
+        if (!teamCreated) {
+            throw new Error("Falha ao criar time no banco de dados.");
         }
 
-        // 4. Update Local/Global State
+        // 3. Update User Role in Real Database
+        const userUpdated = await dbService.updateUserTeamAndRole(user.id, newTeamId, UserRole.OWNER);
+
+        if (!userUpdated) {
+             throw new Error("Time criado, mas falha ao atualizar usuário.");
+        }
+
+        // 4. Update Local State (Mocks for instant UI feedback + Global App State)
+        // @ts-ignore
+        MOCK_TEAMS.push(newTeam); // Keep mock sync for now until full DB fetch is implemented in App.tsx
+
         const updatedUser = { ...user, role: UserRole.OWNER, teamId: newTeamId };
         if (onUpdateUser) {
             onUpdateUser(updatedUser);
@@ -76,7 +80,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
         setIsCreatingTeam(false);
         setNewTeamName('');
         alert(`Parabéns! Você fundou o ${newTeamName}. Agora você é um Dono de Time.`);
-    }, 1000);
+
+    } catch (error) {
+        console.error(error);
+        setCreateError("Erro ao criar time. Tente novamente.");
+        setIsCreatingTeam(false);
+    }
   };
 
   return (

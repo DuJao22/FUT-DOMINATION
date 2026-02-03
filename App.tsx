@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigation } from './components/Navigation';
 import { TerritoryMap } from './components/TerritoryMap';
 import { GenAIStudio } from './components/GenAIStudio';
@@ -10,6 +10,7 @@ import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
 import { MOCK_TEAMS, MOCK_TERRITORIES, MOCK_POSTS, MOCK_MATCHES } from './constants';
 import { UserRole, User } from './types';
+import { dbService } from './services/database';
 
 // Reload Icon Component (Relicon)
 const ReloadButton = () => (
@@ -28,8 +29,38 @@ const App: React.FC = () => {
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // --- SESSION PERSISTENCE ---
+  useEffect(() => {
+    const restoreSession = async () => {
+        const storedUserId = localStorage.getItem('fut_dom_user_id');
+        if (storedUserId) {
+            try {
+                console.log("🔄 Restoring session for:", storedUserId);
+                const user = await dbService.getUserById(storedUserId);
+                if (user) {
+                    setActiveUser(user);
+                    if (user.role === UserRole.OWNER) {
+                         setCurrentTab('team');
+                    }
+                } else {
+                    // Invalid ID in storage
+                    localStorage.removeItem('fut_dom_user_id');
+                }
+            } catch (error) {
+                console.error("Session restore failed", error);
+            }
+        }
+        setIsInitializing(false);
+    };
+
+    restoreSession();
+  }, []);
 
   const handleLogin = (user: User) => {
+    // Save to local storage for persistence
+    localStorage.setItem('fut_dom_user_id', user.id);
     setActiveUser(user);
     if (user.role === UserRole.OWNER) {
       setCurrentTab('team');
@@ -39,14 +70,27 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('fut_dom_user_id');
     setActiveUser(null);
     setCurrentTab('map');
   };
 
   // Called when user upgrades to Owner inside Profile
   const handleUserUpdate = (updatedUser: User) => {
+    // Update local state and storage if needed (storage usually just needs ID)
     setActiveUser(updatedUser);
   };
+
+  if (isInitializing) {
+      return (
+        <div className="min-h-screen bg-pitch-950 flex flex-col items-center justify-center">
+            <div className="text-4xl font-display font-bold text-white mb-4 tracking-wider animate-pulse">
+                FUT<span className="text-neon">-DOM</span>
+            </div>
+            <div className="w-8 h-8 border-4 border-neon border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      );
+  }
 
   if (!activeUser) {
     return (
@@ -58,6 +102,8 @@ const App: React.FC = () => {
   }
 
   // Find the team associated with the user (if any)
+  // Note: In a full DB implementation, we would fetch this team async, but for hybrid approach we use constants as fallback
+  // or MOCK_TEAMS until we fully replace the Feed/Map with DB calls.
   const myTeam = MOCK_TEAMS.find(t => t.id === activeUser.teamId) || MOCK_TEAMS[0];
 
   // Derive simple role for easier checks
