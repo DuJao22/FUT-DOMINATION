@@ -1,8 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { ImageResolution } from '../types';
 
-// Initialize the API client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize the API client safely
+// This prevents the entire app from crashing if the API key is missing or invalid on startup
+let ai: GoogleGenAI | null = null;
+
+try {
+  if (process.env.API_KEY) {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  } else {
+    console.warn("Google GenAI API Key is missing. AI features will be disabled.");
+  }
+} catch (error) {
+  console.error("Failed to initialize Google GenAI:", error);
+}
 
 /**
  * Generates a team logo or banner using Gemini 3 Pro Image Preview.
@@ -12,6 +23,8 @@ export const generateTeamImage = async (
   prompt: string,
   resolution: ImageResolution
 ): Promise<string> => {
+  if (!ai) throw new Error("API Key not configured");
+  
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-image-preview',
@@ -54,6 +67,8 @@ export const editMatchPhoto = async (
   base64Image: string,
   editPrompt: string
 ): Promise<string> => {
+  if (!ai) throw new Error("API Key not configured");
+
   try {
     // Strip header if present to get raw base64
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");

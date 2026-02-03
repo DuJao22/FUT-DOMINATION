@@ -11,6 +11,19 @@ import { Rankings } from './components/Rankings';
 import { CURRENT_USER, MOCK_TEAMS, MOCK_TERRITORIES, MOCK_POSTS, MOCK_MATCHES } from './constants';
 import { UserRole } from './types';
 
+// Reload Icon Component (Relicon)
+const ReloadButton = () => (
+  <button 
+    onClick={() => window.location.reload()} 
+    className="fixed bottom-4 right-4 z-[9999] bg-pitch-900/80 backdrop-blur border border-white/20 text-white p-3 rounded-full shadow-2xl hover:bg-neon hover:text-black transition-all group"
+    title="Recarregar App"
+  >
+    <svg className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  </button>
+);
+
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.FAN); // Default to Fan until login
@@ -25,7 +38,12 @@ const App: React.FC = () => {
   };
 
   if (!isLoggedIn) {
-    return <Auth onLogin={handleLogin} />;
+    return (
+      <>
+        <Auth onLogin={handleLogin} />
+        <ReloadButton />
+      </>
+    );
   }
 
   // Simulate data based on role for the demo
@@ -114,6 +132,9 @@ const App: React.FC = () => {
 
       {/* Modal Overlay - Only accessible to owners */}
       {showMatchLogger && userRole === UserRole.OWNER && <MatchLogger onClose={() => setShowMatchLogger(false)} />}
+      
+      {/* Relicon available everywhere */}
+      <ReloadButton />
     </div>
   );
 };
