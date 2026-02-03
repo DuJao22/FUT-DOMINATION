@@ -31,9 +31,6 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setActiveUser(user);
-    // Determine default tab based on role
-    // Owner -> Team Management
-    // Player/Fan -> Map or Feed
     if (user.role === UserRole.OWNER) {
       setCurrentTab('team');
     } else {
@@ -44,6 +41,11 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setActiveUser(null);
     setCurrentTab('map');
+  };
+
+  // Called when user upgrades to Owner inside Profile
+  const handleUserUpdate = (updatedUser: User) => {
+    setActiveUser(updatedUser);
   };
 
   if (!activeUser) {
@@ -133,7 +135,7 @@ const App: React.FC = () => {
             {/* Pass current user to Feed for Following Logic */}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
-            {currentTab === 'profile' && <Profile user={activeUser} matches={MOCK_MATCHES} />}
+            {currentTab === 'profile' && <Profile user={activeUser} matches={MOCK_MATCHES} onUpdateUser={handleUserUpdate} />}
             {currentTab === 'rank' && <Rankings teams={MOCK_TEAMS} />}
           </div>
 

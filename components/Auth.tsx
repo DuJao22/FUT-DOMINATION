@@ -6,45 +6,77 @@ interface AuthProps {
   onLogin: (user: User) => void;
 }
 
-type AuthStep = 'LOGIN' | 'SUBSCRIPTION';
-
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const [step, setStep] = useState<AuthStep>('LOGIN');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Temporary state for the flow if needed
-  const [tempUser, setTempUser] = useState<User | null>(null);
 
-  // --- Step 1: Login Logic ---
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // --- Login / Register Logic ---
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate network delay
     setTimeout(() => {
-      const foundUser = MOCK_AUTH_DB.find(
-        u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
+      if (isRegistering) {
+        // --- REGISTRATION LOGIC ---
+        
+        // 1. Check if email exists
+        const emailExists = MOCK_AUTH_DB.some(u => u.email.toLowerCase() === email.toLowerCase());
+        if (emailExists) {
+          setError('Este email já está em uso.');
+          setIsLoading(false);
+          return;
+        }
 
-      if (foundUser) {
+        // 2. Create new Common User (FAN)
+        const newUser = {
+          id: `u-${Date.now()}`,
+          name: name,
+          email: email,
+          password: password, // In real app, hash this!
+          role: UserRole.FAN,
+          teamId: undefined,
+          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+          bio: 'Novo usuário no Fut-Domination.',
+          location: 'Brasil',
+          following: [],
+          badges: [],
+          stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 }
+        };
+
+        // 3. Save to Mock DB
+        MOCK_AUTH_DB.push(newUser);
+
+        // 4. Log in
+        // Remove password before passing to app
+        const { password: _, ...safeUser } = newUser;
         setIsLoading(false);
-        // Remove password before passing user data to app state
-        const { password, ...safeUser } = foundUser;
         onLogin(safeUser as User);
+
       } else {
-        setIsLoading(false);
-        setError('Email ou senha incorretos.');
+        // --- LOGIN LOGIC ---
+        const foundUser = MOCK_AUTH_DB.find(
+          u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+        );
+
+        if (foundUser) {
+          setIsLoading(false);
+          const { password, ...safeUser } = foundUser;
+          onLogin(safeUser as User);
+        } else {
+          setIsLoading(false);
+          setError('Email ou senha incorretos.');
+        }
       }
     }, 800);
   };
 
-  // Helper to fill credentials for demo purposes
-  const fillDemo = (role: string) => {
-    if (role === 'owner') { setEmail('admin@fut.com'); setPassword('123'); }
+  const fillDemo = () => {
+    setEmail('admin@fut.com'); setPassword('123');
     setError('');
   };
 
@@ -59,13 +91,29 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <h1 className="text-5xl font-display font-bold text-white mb-2 tracking-wider">
             FUT<span className="text-neon">-DOMINATION</span>
           </h1>
-          <p className="text-pitch-300">Banco de Dados: Limpo</p>
+          <p className="text-pitch-300">
+            {isRegistering ? 'Crie sua conta e entre em campo.' : 'Entre para dominar o território.'}
+          </p>
         </div>
 
-        <form onSubmit={handleLoginSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold">
               {error}
+            </div>
+          )}
+
+          {isRegistering && (
+            <div className="animate-[fadeIn_0.3s]">
+              <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Nome Completo</label>
+              <input 
+                type="text" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none transition-colors"
+                placeholder="Ex: João da Silva"
+                required={isRegistering}
+              />
             </div>
           )}
 
@@ -99,20 +147,29 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           >
             {isLoading ? (
                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-            ) : 'Iniciar Novo Jogo'}
+            ) : (isRegistering ? 'Criar Conta' : 'Entrar')}
           </button>
         </form>
 
-        {/* Demo Helper - Useful for the user to test hierarchies */}
-        <div className="mt-8 border-t border-pitch-800 pt-6">
-          <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Acesso Inicial</p>
-          <div className="flex gap-2 justify-center">
-             <button onClick={() => fillDemo('owner')} className="bg-pitch-800 hover:bg-pitch-700 text-gold text-xs px-3 py-2 rounded-lg border border-gold/20">
-               👑 Admin Inicial
-             </button>
-          </div>
-          <p className="text-center text-gray-600 text-[10px] mt-2">Senha: 123</p>
+        <div className="mt-6 text-center">
+            <button 
+                onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
+                className="text-pitch-300 hover:text-white text-sm font-bold underline decoration-neon underline-offset-4 transition-colors"
+            >
+                {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem conta? Cadastre-se'}
+            </button>
         </div>
+
+        {!isRegistering && (
+          <div className="mt-8 border-t border-pitch-800 pt-6">
+            <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Acesso Rápido (Demo)</p>
+            <div className="flex gap-2 justify-center">
+               <button onClick={fillDemo} className="bg-pitch-800 hover:bg-pitch-700 text-gold text-xs px-3 py-2 rounded-lg border border-gold/20">
+                 👑 Admin
+               </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

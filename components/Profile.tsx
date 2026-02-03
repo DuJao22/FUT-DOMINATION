@@ -1,14 +1,121 @@
-import React from 'react';
-import { User, Match } from '../types';
+import React, { useState } from 'react';
+import { User, Match, UserRole } from '../types';
+import { MOCK_TEAMS, MOCK_AUTH_DB } from '../constants';
 
 interface ProfileProps {
   user: User;
   matches: Match[];
+  onUpdateUser?: (updatedUser: User) => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, matches }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser }) => {
+  const [newTeamName, setNewTeamName] = useState('');
+  const [createError, setCreateError] = useState('');
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+
+  const handleCreateTeam = () => {
+    setCreateError('');
+    
+    if (!newTeamName.trim()) {
+        setCreateError('O nome do time não pode estar vazio.');
+        return;
+    }
+
+    if (newTeamName.length < 3) {
+        setCreateError('O nome deve ter pelo menos 3 caracteres.');
+        return;
+    }
+
+    // UNIQUE CHECK
+    const nameExists = MOCK_TEAMS.some(t => t.name.toLowerCase() === newTeamName.trim().toLowerCase());
+    if (nameExists) {
+        setCreateError('Este nome de time já existe. Escolha outro.');
+        return;
+    }
+
+    setIsCreatingTeam(true);
+
+    // Simulate API Call
+    setTimeout(() => {
+        const newTeamId = `t-${Date.now()}`;
+        
+        // 1. Create New Team Object
+        const newTeam = {
+            id: newTeamId,
+            name: newTeamName.trim(),
+            logoUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(newTeamName)}&background=random&length=2`,
+            wins: 0,
+            losses: 0,
+            draws: 0,
+            territoryColor: '#ffffff', // User can change later
+            players: [user], // Owner is first player
+            ownerId: user.id,
+            category: 'Society', // Default
+            homeTurf: 'Sem Local'
+        };
+
+        // 2. Add to Mock Database
+        // @ts-ignore
+        MOCK_TEAMS.push(newTeam);
+
+        // 3. Update User Role and Link
+        // We modify the object in MOCK_AUTH_DB to ensure persistence during this session
+        const dbUser = MOCK_AUTH_DB.find(u => u.id === user.id);
+        if (dbUser) {
+            dbUser.role = UserRole.OWNER;
+            dbUser.teamId = newTeamId;
+            dbUser.badges?.push('👑 Fundador');
+        }
+
+        // 4. Update Local/Global State
+        const updatedUser = { ...user, role: UserRole.OWNER, teamId: newTeamId };
+        if (onUpdateUser) {
+            onUpdateUser(updatedUser);
+        }
+
+        setIsCreatingTeam(false);
+        setNewTeamName('');
+        alert(`Parabéns! Você fundou o ${newTeamName}. Agora você é um Dono de Time.`);
+    }, 1000);
+  };
+
   return (
     <div className="space-y-8 pb-24">
+      
+      {/* --- SECTION: UPGRADE TO OWNER (Visible only to Fans/Players) --- */}
+      {user.role !== UserRole.OWNER && (
+         <div className="bg-gradient-to-r from-indigo-900 to-pitch-900 rounded-[2rem] p-8 border border-neon/30 shadow-[0_0_30px_rgba(57,255,20,0.1)] relative overflow-hidden animate-[fadeIn_0.5s]">
+            <div className="absolute top-0 right-0 p-8 opacity-10 text-9xl">👑</div>
+            <div className="relative z-10">
+                <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide mb-2">Modo Carreira</h2>
+                <p className="text-gray-300 mb-6 max-w-md">Você está assistindo da arquibancada. Quer entrar em campo e dominar seu bairro? Funde seu próprio time hoje.</p>
+                
+                <div className="bg-black/40 p-6 rounded-2xl border border-white/10 max-w-md">
+                    <label className="block text-neon text-xs font-bold mb-2 uppercase">Nome do Seu Novo Time</label>
+                    <div className="flex flex-col gap-3">
+                        <input 
+                            type="text" 
+                            value={newTeamName}
+                            onChange={(e) => setNewTeamName(e.target.value)}
+                            className="bg-pitch-950 border border-pitch-600 rounded-lg px-4 py-3 text-white focus:border-neon focus:outline-none placeholder-gray-600 w-full"
+                            placeholder="Ex: Real Osasco FC"
+                        />
+                        <button 
+                            onClick={handleCreateTeam}
+                            disabled={isCreatingTeam}
+                            className="bg-neon text-pitch-950 font-bold py-3 rounded-lg shadow-neon hover:bg-white transition-colors uppercase tracking-wider"
+                        >
+                            {isCreatingTeam ? 'Fundando Clube...' : 'Fundar Clube Agora'}
+                        </button>
+                    </div>
+                    {createError && (
+                        <p className="text-red-400 text-sm mt-3 font-bold bg-red-900/20 p-2 rounded text-center border border-red-500/30">{createError}</p>
+                    )}
+                </div>
+            </div>
+         </div>
+      )}
+
       {/* Player Card (Premium Holo Effect) */}
       <div className="relative mx-auto max-w-sm group perspective-1000">
          {/* Animated Glow Behind */}
@@ -23,12 +130,16 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches }) => {
 
                  <div className="flex justify-between items-start mb-4 relative z-10">
                      <div className="flex flex-col">
-                        <span className="text-6xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-neon to-green-600 leading-none filter drop-shadow-sm">92</span>
+                        <span className="text-6xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-neon to-green-600 leading-none filter drop-shadow-sm">
+                            {user.role === UserRole.OWNER ? '92' : '75'}
+                        </span>
                         <span className="text-sm uppercase font-bold text-pitch-300 tracking-widest ml-1">OVR</span>
                      </div>
                      <div className="text-right">
                          <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Flag_of_Brazil.svg" className="w-10 h-7 rounded shadow-md inline-block mb-1 border border-white/10" />
-                         <p className="text-xs font-bold text-pitch-400 tracking-wide">ATA • NEON FC</p>
+                         <p className="text-xs font-bold text-pitch-400 tracking-wide uppercase">
+                             {user.role === UserRole.OWNER ? 'DONO/CAPITÃO' : 'TORCEDOR LIVRE'}
+                         </p>
                      </div>
                  </div>
                  
@@ -66,12 +177,15 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches }) => {
                 <span>🏆</span> Sala de Troféus
             </h3>
             <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar mask-gradient-right">
-                {user.badges?.map((badge, idx) => (
+                {user.badges && user.badges.length > 0 ? user.badges.map((badge, idx) => (
                     <div key={idx} className="flex-shrink-0 bg-gradient-to-br from-pitch-900 to-black p-4 rounded-2xl border border-white/10 w-28 flex flex-col items-center gap-3 text-center shadow-lg group hover:border-gold/50 transition-colors">
                         <div className="text-3xl filter drop-shadow-md group-hover:scale-110 transition-transform">🏆</div>
                         <span className="text-[10px] font-bold text-pitch-100 uppercase leading-tight">{badge}</span>
                     </div>
-                ))}
+                )) : (
+                    <p className="text-gray-500 text-sm italic">Nenhum troféu conquistado ainda.</p>
+                )}
+                
                 <div className="flex-shrink-0 bg-white/5 p-4 rounded-2xl border border-white/5 border-dashed w-28 flex flex-col items-center justify-center opacity-40">
                     <div className="text-2xl mb-2">🔒</div>
                     <span className="text-[10px]">BLOQUEADO</span>
@@ -85,7 +199,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches }) => {
                 <span>📈</span> Forma Recente
              </h3>
              <div className="space-y-3">
-                 {matches.map(match => (
+                 {matches.length > 0 ? matches.map(match => (
                      <div key={match.id} className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/5 transition-colors group">
                          <div className="flex items-center gap-4">
                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-display font-bold text-lg shadow-inner ${match.homeScore > match.awayScore ? 'bg-neon text-pitch-950' : 'bg-danger text-white'}`}>
@@ -98,7 +212,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches }) => {
                          </div>
                          <span className="font-display text-2xl font-bold text-white/80 group-hover:text-white">{match.homeScore}-{match.awayScore}</span>
                      </div>
-                 ))}
+                 )) : (
+                    <p className="text-gray-500 text-sm italic">Nenhuma partida registrada.</p>
+                 )}
              </div>
         </div>
       </div>
