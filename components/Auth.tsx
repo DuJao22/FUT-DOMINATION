@@ -75,11 +75,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }, 800);
   };
 
-  const fillDemo = () => {
-    setEmail('admin@fut.com'); setPassword('123');
-    setError('');
-  };
-
   return (
     <div className="min-h-screen bg-pitch-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -159,17 +154,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem conta? Cadastre-se'}
             </button>
         </div>
-
-        {!isRegistering && (
-          <div className="mt-8 border-t border-pitch-800 pt-6">
-            <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Acesso Rápido (Demo)</p>
-            <div className="flex gap-2 justify-center">
-               <button onClick={fillDemo} className="bg-pitch-800 hover:bg-pitch-700 text-gold text-xs px-3 py-2 rounded-lg border border-gold/20">
-                 👑 Admin
-               </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
