@@ -26,7 +26,7 @@ Este projeto está configurado como um **Web Service** (Node.js + React), ideal 
 2. **Configure o Ambiente (.env):**
    ```env
    API_KEY=sua_chave_gemini
-   SQLITE_CONNECTION_STRING=sua_string_sqlite
+   =sua_string_sqlite
    ```
 
 3. **Rodar em Desenvolvimento:**
