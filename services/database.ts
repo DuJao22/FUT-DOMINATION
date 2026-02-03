@@ -24,7 +24,6 @@ class DatabaseService {
   }
 
   // --- INITIALIZATION ---
-  // Checks and creates tables if they don't exist in the Cloud DB
   async initSchema() {
       if (!this.db) {
           console.error("❌ Database not initialized during initSchema call.");
@@ -74,7 +73,6 @@ class DatabaseService {
             lng REAL NOT NULL,
             points INTEGER DEFAULT 0
           )`,
-          // Initialize default territories if table is empty
           `INSERT OR IGNORE INTO territories (id, name, lat, lng, points) VALUES 
            ('area1', 'Arena Central', 40.7128, -74.0060, 500),
            ('area2', 'Parque do Oeste', 40.7200, -74.0100, 200),
@@ -84,9 +82,10 @@ class DatabaseService {
 
       for (const sql of queries) {
           try {
-              await this.query(sql);
+              // We use specific try/catch here because table exists errors are fine
+              await this.db.sql(sql);
           } catch (e) {
-              console.error("⚠️ Schema Init Error on:", sql, e);
+              console.log("⚠️ Schema info (usually harmless if exists):", e);
           }
       }
       console.log("✅ Schema Verified.");
@@ -96,18 +95,17 @@ class DatabaseService {
     return this.db;
   }
 
+  // CRITICAL FIX: This method must THROW error if it fails, so the UI knows registration failed.
   async query(sql: string, params: any[] = []) {
     if (!this.db) {
-      console.error("❌ Database not initialized (this.db is null). Check connection string.");
-      return [];
+      throw new Error("Banco de dados não inicializado.");
     }
     try {
       const result = await this.db.sql(sql, params);
       return result;
     } catch (error) {
-      console.error("❌ Database Query Error:", error);
-      // Don't throw to prevent app crash, return empty array/null logic handled by caller
-      return [];
+      console.error("❌ Database Query Error:", error, "SQL:", sql);
+      throw error; // Propagate error to caller
     }
   }
 
@@ -141,7 +139,7 @@ class DatabaseService {
       ownerId: row.owner_id,
       category: row.category,
       homeTurf: row.home_turf,
-      players: [] // Fetched separately usually
+      players: []
     };
   }
 
@@ -159,33 +157,50 @@ class DatabaseService {
   // --- AUTH METHODS ---
 
   async registerUser(user: User, passwordRaw: string): Promise<User | null> {
+    // Sanitize email
+    const safeEmail = user.email.trim().toLowerCase();
+    
     try {
+        console.log(`Attempting to register user: ${safeEmail}`);
+        // We use the normalized email here
         await this.query(
             `INSERT INTO users (id, name, email, role, avatar_url, bio, location) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [user.id, user.name, user.email, user.role, user.avatarUrl, user.bio, user.location]
+            [user.id, user.name, safeEmail, user.role, user.avatarUrl, user.bio, user.location]
         );
-        return user;
+        console.log("✅ User successfully persisted to SQLite Cloud.");
+        return { ...user, email: safeEmail };
     } catch (error) {
-        console.error("Registration failed:", error);
-        throw error;
+        console.error("🚨 Registration Fatal Error:", error);
+        throw error; // Caller (Auth.tsx) handles the alert
     }
   }
 
   async loginUser(email: string): Promise<User | null> {
-      const rows = await this.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
-      if (Array.isArray(rows) && rows.length > 0) {
-          return this.mapUser(rows[0]);
+      const safeEmail = email.trim().toLowerCase();
+      
+      try {
+        const rows = await this.query('SELECT * FROM users WHERE email = ? LIMIT 1', [safeEmail]);
+        if (Array.isArray(rows) && rows.length > 0) {
+            return this.mapUser(rows[0]);
+        }
+        return null;
+      } catch (e) {
+        console.error("Login Query Error", e);
+        throw e;
       }
-      return null;
   }
 
   async getUserById(id: string): Promise<User | null> {
-      const rows = await this.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
-      if (Array.isArray(rows) && rows.length > 0) {
-          return this.mapUser(rows[0]);
+      try {
+        const rows = await this.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
+        if (Array.isArray(rows) && rows.length > 0) {
+            return this.mapUser(rows[0]);
+        }
+        return null;
+      } catch (e) {
+          return null;
       }
-      return null;
   }
 
   async updateUserTeamAndRole(userId: string, teamId: string, role: UserRole): Promise<boolean> {
@@ -218,18 +233,21 @@ class DatabaseService {
   }
 
   async getTeams(): Promise<Team[]> {
-    const rows = await this.query('SELECT * FROM teams');
-    const teams = Array.isArray(rows) ? rows.map(this.mapTeam) : [];
-    
-    // Simple fetch of owners to populate player list partially
-    // In a real app, use JOINs or separate endpoints
-    for (const team of teams) {
-        if(team.ownerId) {
-            const owner = await this.getUserById(team.ownerId);
-            if(owner) team.players.push(owner);
+    try {
+        const rows = await this.query('SELECT * FROM teams');
+        const teams = Array.isArray(rows) ? rows.map(this.mapTeam) : [];
+        
+        for (const team of teams) {
+            if(team.ownerId) {
+                const owner = await this.getUserById(team.ownerId);
+                if(owner) team.players.push(owner);
+            }
         }
+        return teams;
+    } catch (e) {
+        console.error("Get Teams Error", e);
+        return [];
     }
-    return teams;
   }
 
   // --- MATCH & TERRITORY METHODS ---
@@ -242,7 +260,6 @@ class DatabaseService {
               [match.id, match.date.toISOString(), match.locationName, match.homeTeamId, match.awayTeamName, match.homeScore, match.awayScore, match.isVerified ? 1 : 0]
           );
           
-          // Update Team Stats
           if (match.homeScore > match.awayScore) {
               await this.query(`UPDATE teams SET wins = wins + 1 WHERE id = ?`, [match.homeTeamId]);
           } else if (match.homeScore < match.awayScore) {
@@ -259,22 +276,30 @@ class DatabaseService {
   }
 
   async getTerritories(): Promise<Territory[]> {
-    const rows = await this.query('SELECT * FROM territories');
-    return Array.isArray(rows) ? rows.map(this.mapTerritory) : [];
+    try {
+        const rows = await this.query('SELECT * FROM territories');
+        return Array.isArray(rows) ? rows.map(this.mapTerritory) : [];
+    } catch (e) {
+        return [];
+    }
   }
   
   async getMatches(): Promise<Match[]> {
-    const rows = await this.query('SELECT * FROM matches ORDER BY date DESC');
-    return Array.isArray(rows) ? rows.map((row: any) => ({
-      id: row.id,
-      date: new Date(row.date),
-      locationName: row.location_name,
-      homeTeamId: row.home_team_id,
-      awayTeamName: row.away_team_name,
-      homeScore: row.home_score,
-      awayScore: row.away_score,
-      isVerified: Boolean(row.is_verified)
-    })) : [];
+    try {
+        const rows = await this.query('SELECT * FROM matches ORDER BY date DESC');
+        return Array.isArray(rows) ? rows.map((row: any) => ({
+        id: row.id,
+        date: new Date(row.date),
+        locationName: row.location_name,
+        homeTeamId: row.home_team_id,
+        awayTeamName: row.away_team_name,
+        homeScore: row.home_score,
+        awayScore: row.away_score,
+        isVerified: Boolean(row.is_verified)
+        })) : [];
+    } catch (e) {
+        return [];
+    }
   }
 }
 

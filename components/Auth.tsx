@@ -20,6 +20,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError('');
     setIsLoading(true);
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+
     try {
         if (isRegistering) {
             // --- REGISTRATION LOGIC (DB) ---
@@ -27,11 +30,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             // 1. Create new Common User (FAN)
             const newUser: User = {
                 id: `u-${Date.now()}`,
-                name: name,
-                email: email,
+                name: cleanName,
+                email: cleanEmail,
                 role: UserRole.FAN,
                 teamId: undefined,
-                avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+                avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=random`,
                 bio: 'Novo usuário no Fut-Domination.',
                 location: 'Brasil',
                 following: [],
@@ -40,6 +43,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             };
 
             // 2. Call DB Service
+            // This will now THROW if the DB write fails, preventing false success
             await dbService.registerUser(newUser, password);
             
             // 3. Log in automatically after register
@@ -48,22 +52,30 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         } else {
             // --- LOGIN LOGIC (DB) ---
-            const user = await dbService.loginUser(email);
+            console.log("Tentando login com:", cleanEmail);
+            const user = await dbService.loginUser(cleanEmail);
             
             if (user) {
                 // In a real app, verify password hash here. 
-                // Since schema has no password col, we trust email existence for this demo or update schema later.
                 setIsLoading(false);
                 onLogin(user);
             } else {
                 setIsLoading(false);
-                setError('Email não encontrado ou credenciais inválidas.');
+                setError('Email não encontrado. Verifique se digitou corretamente ou crie uma conta.');
             }
         }
-    } catch (err) {
+    } catch (err: any) {
         setIsLoading(false);
-        console.error(err);
-        setError('Ocorreu um erro ao conectar com o banco de dados. Tente novamente.');
+        console.error("Auth Error:", err);
+        
+        // Detailed error for common SQLiteCloud issues
+        if (err.message?.includes('UNIQUE constraint failed')) {
+             setError('Este email já está cadastrado. Tente fazer login.');
+        } else if (err.message?.includes('Network Error') || err.message?.includes('fetch')) {
+             setError('Erro de conexão com o servidor. Verifique sua internet.');
+        } else {
+             setError('Ocorreu um erro ao salvar no banco de dados. Tente novamente.');
+        }
     }
   };
 
