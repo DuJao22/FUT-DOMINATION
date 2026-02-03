@@ -8,8 +8,8 @@ import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
-import { MOCK_TEAMS, MOCK_TERRITORIES, MOCK_POSTS, MOCK_MATCHES } from './constants';
-import { UserRole, User } from './types';
+import { MOCK_POSTS } from './constants'; // Keep posts mock for now, but teams/matches are real
+import { UserRole, User, Team, Match, Territory } from './types';
 import { dbService } from './services/database';
 
 // Reload Icon Component (Relicon)
@@ -30,13 +30,34 @@ const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
-  // --- SESSION PERSISTENCE ---
+  // --- APP STATE (FROM DB) ---
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [territories, setTerritories] = useState<Territory[]>([]);
+
+  // --- INITIALIZATION & SESSION ---
   useEffect(() => {
-    const restoreSession = async () => {
-        const storedUserId = localStorage.getItem('fut_dom_user_id');
-        if (storedUserId) {
-            try {
+    const initApp = async () => {
+        try {
+            // 1. Initialize Database Schema (Create tables if new)
+            await dbService.initSchema();
+
+            // 2. Fetch Real Data
+            const [fetchedTeams, fetchedMatches, fetchedTerritories] = await Promise.all([
+                dbService.getTeams(),
+                dbService.getMatches(),
+                dbService.getTerritories()
+            ]);
+
+            setTeams(fetchedTeams);
+            setMatches(fetchedMatches);
+            setTerritories(fetchedTerritories);
+
+            // 3. Restore Session
+            const storedUserId = localStorage.getItem('fut_dom_user_id');
+            if (storedUserId) {
                 console.log("🔄 Restoring session for:", storedUserId);
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
@@ -45,23 +66,43 @@ const App: React.FC = () => {
                          setCurrentTab('team');
                     }
                 } else {
-                    // Invalid ID in storage
                     localStorage.removeItem('fut_dom_user_id');
                 }
-            } catch (error) {
-                console.error("Session restore failed", error);
             }
+        } catch (error) {
+            console.error("Initialization failed", error);
+            setInitError("Falha ao conectar ao banco de dados. Verifique a internet ou recarregue.");
+        } finally {
+            setIsInitializing(false);
         }
-        setIsInitializing(false);
     };
 
-    restoreSession();
+    initApp();
   }, []);
 
+  // Refresh data helper
+  const refreshData = async () => {
+      const [fetchedTeams, fetchedMatches, fetchedTerritories] = await Promise.all([
+        dbService.getTeams(),
+        dbService.getMatches(),
+        dbService.getTerritories()
+      ]);
+      setTeams(fetchedTeams);
+      setMatches(fetchedMatches);
+      setTerritories(fetchedTerritories);
+      
+      // Update active user info if needed
+      if(activeUser) {
+          const updatedUser = await dbService.getUserById(activeUser.id);
+          if(updatedUser) setActiveUser(updatedUser);
+      }
+  };
+
   const handleLogin = (user: User) => {
-    // Save to local storage for persistence
     localStorage.setItem('fut_dom_user_id', user.id);
     setActiveUser(user);
+    // Refresh data on login to ensure we see the user's latest state/teams
+    refreshData();
     if (user.role === UserRole.OWNER) {
       setCurrentTab('team');
     } else {
@@ -75,10 +116,9 @@ const App: React.FC = () => {
     setCurrentTab('map');
   };
 
-  // Called when user upgrades to Owner inside Profile
   const handleUserUpdate = (updatedUser: User) => {
-    // Update local state and storage if needed (storage usually just needs ID)
     setActiveUser(updatedUser);
+    refreshData(); // Refresh to show new team created
   };
 
   if (isInitializing) {
@@ -88,6 +128,20 @@ const App: React.FC = () => {
                 FUT<span className="text-neon">-DOM</span>
             </div>
             <div className="w-8 h-8 border-4 border-neon border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-500 text-xs mt-4">Conectando ao SQLite Cloud...</p>
+        </div>
+      );
+  }
+
+  if (initError) {
+      return (
+        <div className="min-h-screen bg-pitch-950 flex flex-col items-center justify-center p-8 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h2 className="text-xl font-bold text-white mb-2">Erro de Conexão</h2>
+            <p className="text-red-400 mb-6">{initError}</p>
+            <button onClick={() => window.location.reload()} className="bg-neon text-black font-bold px-6 py-2 rounded-lg hover:scale-105 transition-transform">
+                Tentar Novamente
+            </button>
         </div>
       );
   }
@@ -101,12 +155,11 @@ const App: React.FC = () => {
     );
   }
 
-  // Find the team associated with the user (if any)
-  // Note: In a full DB implementation, we would fetch this team async, but for hybrid approach we use constants as fallback
-  // or MOCK_TEAMS until we fully replace the Feed/Map with DB calls.
-  const myTeam = MOCK_TEAMS.find(t => t.id === activeUser.teamId) || MOCK_TEAMS[0];
+  // Find the team associated with the user
+  const myTeam = teams.find(t => t.id === activeUser.teamId) || {
+    id: 'temp', name: 'Sem Time', logoUrl: '', wins:0, losses:0, draws:0, players:[], territoryColor:'#ccc', category: 'Society', ownerId:'' 
+  } as Team;
 
-  // Derive simple role for easier checks
   const userRole = activeUser.role;
 
   return (
@@ -119,10 +172,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Main Content Area - Mobile Optimized */}
       <main className="md:ml-64 w-full min-h-screen relative pb-28 md:pb-8">
-        
-        {/* Dynamic Header */}
         {currentTab !== 'map' && (
           <header className="px-6 pt-12 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
@@ -142,7 +192,6 @@ const App: React.FC = () => {
 
         <div className="px-4 md:px-8 max-w-7xl mx-auto h-full mt-4">
           
-          {/* MAP VIEW */}
           {currentTab === 'map' && (
              <div className="h-screen w-full absolute top-0 left-0 pt-0 md:pt-8 md:relative md:h-auto">
                  <div className="absolute top-12 left-6 z-10 md:hidden pointer-events-none">
@@ -150,48 +199,50 @@ const App: React.FC = () => {
                  </div>
                  
                  {userRole === UserRole.OWNER && (
-                    <>
-                        <div className="absolute top-12 right-6 z-10 md:hidden">
-                            <button 
-                                onClick={() => setShowMatchLogger(true)}
-                                className="bg-neon text-pitch-950 w-12 h-12 rounded-full flex items-center justify-center shadow-neon font-bold text-2xl active:scale-90 transition-transform animate-pulse-slow"
-                            >
-                                ⚔️
-                            </button>
-                        </div>
-                        {/* Desktop Only Button */}
-                        <div className="hidden md:flex justify-end mb-4">
-                            <button 
-                                onClick={() => setShowMatchLogger(true)}
-                                className="bg-neon text-pitch-950 font-display font-bold text-xl px-8 py-2 rounded-xl shadow-neon hover:shadow-neon-hover hover:scale-105 transition-all flex items-center gap-2"
-                            >
-                                <span>⚔️</span> REGISTRAR JOGO OFICIAL
-                            </button>
-                        </div>
-                    </>
+                    <div className="hidden md:flex justify-end mb-4">
+                        <button 
+                            onClick={() => setShowMatchLogger(true)}
+                            className="bg-neon text-pitch-950 font-display font-bold text-xl px-8 py-2 rounded-xl shadow-neon hover:shadow-neon-hover hover:scale-105 transition-all flex items-center gap-2"
+                        >
+                            <span>⚔️</span> REGISTRAR JOGO OFICIAL
+                        </button>
+                    </div>
+                 )}
+                 {userRole === UserRole.OWNER && (
+                    <div className="absolute top-12 right-6 z-10 md:hidden">
+                        <button 
+                            onClick={() => setShowMatchLogger(true)}
+                            className="bg-neon text-pitch-950 w-12 h-12 rounded-full flex items-center justify-center shadow-neon font-bold text-2xl active:scale-90 transition-transform animate-pulse-slow"
+                        >
+                            ⚔️
+                        </button>
+                    </div>
                  )}
 
-                 <TerritoryMap territories={MOCK_TERRITORIES} teams={MOCK_TEAMS} />
+                 <TerritoryMap territories={territories} teams={teams} />
              </div>
           )}
 
-          {/* OTHER TABS - Wrapped in fade animation */}
           <div className="animate-[fadeIn_0.5s_ease-out]">
             {currentTab === 'studio' && <GenAIStudio />}
-            {/* Pass current user to Feed for Following Logic */}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
-            {currentTab === 'profile' && <Profile user={activeUser} matches={MOCK_MATCHES} onUpdateUser={handleUserUpdate} />}
-            {currentTab === 'rank' && <Rankings teams={MOCK_TEAMS} />}
+            {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} />}
+            {currentTab === 'rank' && <Rankings teams={teams} />}
           </div>
 
         </div>
       </main>
 
-      {/* Modal Overlay - Only accessible to owners */}
-      {showMatchLogger && userRole === UserRole.OWNER && <MatchLogger onClose={() => setShowMatchLogger(false)} />}
+      {/* Pass user info to match logger for DB saving */}
+      {showMatchLogger && userRole === UserRole.OWNER && (
+          <MatchLogger 
+            onClose={() => { setShowMatchLogger(false); refreshData(); }} 
+            currentUser={activeUser}
+            userTeamId={activeUser.teamId!}
+          />
+      )}
       
-      {/* Relicon available everywhere */}
       <ReloadButton />
     </div>
   );

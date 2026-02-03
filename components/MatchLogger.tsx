@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { dbService } from '../services/database';
+import { Match, User } from '../types';
 
 // Component to handle map clicks and set location
 const LocationPicker = ({ onLocationSelect, initialPosition }: { onLocationSelect: (lat: number, lng: number) => void, initialPosition?: [number, number] }) => {
@@ -37,19 +39,63 @@ const LocationPicker = ({ onLocationSelect, initialPosition }: { onLocationSelec
     return position ? <Marker position={position} icon={selectionIcon} /> : null;
 };
 
-export const MatchLogger: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [step, setStep] = useState<'details' | 'map'>('details');
-  const [locationName, setLocationName] = useState<string>('');
-  const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
+interface MatchLoggerProps {
+    onClose: () => void;
+    currentUser: User;
+    userTeamId: string;
+}
 
-  const handleSubmit = (e: React.FormEvent) => {
+export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, userTeamId }) => {
+  const [step, setStep] = useState<'details' | 'map'>('details');
+  const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
+  
+  // Form State
+  const [opponentName, setOpponentName] = useState('');
+  const [homeScore, setHomeScore] = useState(0);
+  const [awayScore, setAwayScore] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if(!coordinates) {
         alert("Por favor selecione o local do jogo no mapa.");
         return;
     }
-    alert(`Jogo registrado com sucesso em [${coordinates.lat.toFixed(5)}, ${coordinates.lng.toFixed(5)}]! Status do território atualizado.`);
-    onClose();
+    
+    if (!opponentName) {
+        alert("Nome do oponente é obrigatório.");
+        return;
+    }
+
+    setIsSaving(true);
+
+    try {
+        const newMatch: Match = {
+            id: `m-${Date.now()}`,
+            date: new Date(),
+            locationName: `Campo [${coordinates.lat.toFixed(3)}, ${coordinates.lng.toFixed(3)}]`, // Should reverse geocode ideally
+            homeTeamId: userTeamId,
+            awayTeamName: opponentName,
+            homeScore: Number(homeScore),
+            awayScore: Number(awayScore),
+            isVerified: true
+        };
+
+        const success = await dbService.createMatch(newMatch);
+        
+        if (success) {
+            alert("Jogo registrado com sucesso no banco de dados!");
+            onClose();
+        } else {
+            alert("Erro ao salvar jogo. Tente novamente.");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Erro de conexão.");
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   return (
@@ -106,8 +152,16 @@ export const MatchLogger: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <div className="grid grid-cols-2 gap-6">
                         <div>
                             <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Meu Time</label>
-                            <div className="bg-pitch-800 p-3 rounded-lg text-white font-bold text-center border border-pitch-700">Neon FC</div>
-                            <input type="number" className="mt-2 w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-center text-2xl font-display font-bold text-white focus:border-neon focus:outline-none" defaultValue={0} min={0}/>
+                            <div className="bg-pitch-800 p-3 rounded-lg text-white font-bold text-center border border-pitch-700 truncate">
+                                {currentUser.name}
+                            </div>
+                            <input 
+                                type="number" 
+                                className="mt-2 w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-center text-2xl font-display font-bold text-white focus:border-neon focus:outline-none" 
+                                value={homeScore}
+                                onChange={(e) => setHomeScore(parseInt(e.target.value))}
+                                min={0}
+                            />
                         </div>
 
                         <div className="flex flex-col items-center justify-center pt-6">
@@ -116,8 +170,21 @@ export const MatchLogger: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
                         <div>
                             <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Oponente</label>
-                            <input type="text" className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white text-center text-sm mb-2 focus:border-neon focus:outline-none placeholder-gray-600" placeholder="Nome do Time"/>
-                            <input type="number" className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-center text-2xl font-display font-bold text-white focus:border-neon focus:outline-none" defaultValue={0} min={0}/>
+                            <input 
+                                type="text" 
+                                className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white text-center text-sm mb-2 focus:border-neon focus:outline-none placeholder-gray-600" 
+                                placeholder="Nome do Time"
+                                value={opponentName}
+                                onChange={(e) => setOpponentName(e.target.value)}
+                                required
+                            />
+                            <input 
+                                type="number" 
+                                className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-center text-2xl font-display font-bold text-white focus:border-neon focus:outline-none" 
+                                value={awayScore}
+                                onChange={(e) => setAwayScore(parseInt(e.target.value))}
+                                min={0}
+                            />
                         </div>
                     </div>
 
@@ -144,9 +211,10 @@ export const MatchLogger: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <button 
                     type="submit"
                     form="match-form"
-                    className="w-full bg-neon text-pitch-950 font-bold py-3 rounded-xl hover:bg-green-400 transition-all shadow-lg shadow-neon/20 uppercase tracking-widest text-lg"
+                    disabled={isSaving}
+                    className="w-full bg-neon text-pitch-950 font-bold py-3 rounded-xl hover:bg-green-400 transition-all shadow-lg shadow-neon/20 uppercase tracking-widest text-lg flex justify-center"
                 >
-                    Reivindicar Vitória
+                    {isSaving ? 'Salvando...' : 'Reivindicar Vitória'}
                 </button>
              )}
         </div>
