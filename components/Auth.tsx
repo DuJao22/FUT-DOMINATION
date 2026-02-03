@@ -1,147 +1,65 @@
 import React, { useState } from 'react';
-import { UserRole } from '../types';
+import { UserRole, User } from '../types';
+import { MOCK_AUTH_DB } from '../constants';
 
 interface AuthProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (user: User) => void;
 }
 
-type AuthStep = 'LOGIN' | 'ROLE_SELECTION' | 'SUBSCRIPTION';
+type AuthStep = 'LOGIN' | 'SUBSCRIPTION';
 
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [step, setStep] = useState<AuthStep>('LOGIN');
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Temporary state for the flow if needed
+  const [tempUser, setTempUser] = useState<User | null>(null);
 
-  // --- Step 1: Login Simulation ---
+  // --- Step 1: Login Logic ---
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setIsLoading(true);
+
+    // Simulate network delay
     setTimeout(() => {
-      setIsLoading(false);
-      setStep('ROLE_SELECTION');
-    }, 1000);
+      const foundUser = MOCK_AUTH_DB.find(
+        u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+      );
+
+      if (foundUser) {
+        setIsLoading(false);
+        // Remove password before passing user data to app state
+        const { password, ...safeUser } = foundUser;
+        
+        // If it's an Owner without a team (hypothetically), we might show subscription,
+        // but for this demo, we assume owners have teams or go straight in.
+        // You could add logic here: if (safeUser.role === UserRole.OWNER && !safeUser.subscriptionActive) ...
+        
+        onLogin(safeUser as User);
+      } else {
+        setIsLoading(false);
+        setError('Email ou senha incorretos.');
+      }
+    }, 800);
   };
 
-  // --- Step 2: Role Selection ---
-  const handleRoleSelect = (role: UserRole) => {
-    setSelectedRole(role);
-    if (role === UserRole.OWNER) {
-      setStep('SUBSCRIPTION');
-    } else {
-      // Fan/Common user goes straight to app
-      setIsLoading(true);
-      setTimeout(() => onLogin(role), 800);
-    }
-  };
-
-  // --- Step 3: Subscription (Owner Only) ---
-  const handlePayment = () => {
-    setIsLoading(true);
-    // Simulate payment processing
-    setTimeout(() => {
-      onLogin(UserRole.OWNER);
-    }, 2000);
+  // Helper to fill credentials for demo purposes
+  const fillDemo = (role: string) => {
+    if (role === 'owner') { setEmail('dono@fut.com'); setPassword('123'); }
+    if (role === 'player') { setEmail('goleiro@fut.com'); setPassword('123'); }
+    if (role === 'fan') { setEmail('torcedor@fut.com'); setPassword('123'); }
+    setError('');
   };
 
   // --- Renders ---
 
-  if (step === 'ROLE_SELECTION') {
-    return (
-      <div className="min-h-screen bg-pitch-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <div className="max-w-4xl w-full z-10">
-          <h2 className="text-4xl font-display font-bold text-white text-center mb-2">Escolha seu Caminho</h2>
-          <p className="text-gray-400 text-center mb-10">Como você quer dominar o jogo?</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Owner Option */}
-            <button 
-              onClick={() => handleRoleSelect(UserRole.OWNER)}
-              className="group relative bg-pitch-900 border border-neon/30 hover:border-neon rounded-3xl p-8 text-left transition-all hover:scale-[1.02] hover:shadow-neon"
-            >
-              <div className="absolute top-4 right-4 text-3xl">👑</div>
-              <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-neon">Dono de Time</h3>
-              <p className="text-gray-400 text-sm mb-6">Crie seu elenco, gerencie 22 jogadores, registre jogos e domine territórios reais.</p>
-              <ul className="space-y-2 mb-8">
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-neon">✓</span> Criar e Gerenciar Time</li>
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-neon">✓</span> Registrar Jogos Oficiais</li>
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-neon">✓</span> Dominar Zonas no Mapa</li>
-              </ul>
-              <div className="mt-auto inline-block bg-neon text-black font-bold px-4 py-2 rounded-lg text-sm">Selecionar Dono</div>
-            </button>
-
-            {/* Fan Option */}
-            <button 
-              onClick={() => handleRoleSelect(UserRole.FAN)}
-              className="group relative bg-pitch-900 border border-white/10 hover:border-white/50 rounded-3xl p-8 text-left transition-all hover:scale-[1.02]"
-            >
-              <div className="absolute top-4 right-4 text-3xl">🎫</div>
-              <h3 className="text-2xl font-bold text-white mb-2">Torcedor / Jogador</h3>
-              <p className="text-gray-400 text-sm mb-6">Siga seus times locais favoritos, entre em fanclubes, veja estatísticas e confira o mapa de dominação.</p>
-              <ul className="space-y-2 mb-8">
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-white">✓</span> Ver Mapa ao Vivo</li>
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-white">✓</span> Entrar em Fanclubes</li>
-                <li className="flex items-center gap-2 text-sm text-gray-300"><span className="text-white">✓</span> Acompanhar Estatísticas</li>
-              </ul>
-              <div className="mt-auto inline-block bg-gray-700 text-white font-bold px-4 py-2 rounded-lg text-sm group-hover:bg-white group-hover:text-black transition-colors">Selecionar Torcedor</div>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === 'SUBSCRIPTION') {
-    return (
-      <div className="min-h-screen bg-pitch-950 flex flex-col items-center justify-center p-6 relative">
-        <div className="absolute inset-0 bg-hero-glow opacity-20 animate-pulse-slow"></div>
-        
-        <div className="bg-pitch-900/90 backdrop-blur-xl border border-gold/30 p-8 rounded-3xl w-full max-w-md shadow-2xl relative z-10 text-center">
-           <div className="w-20 h-20 bg-gradient-to-br from-gold to-yellow-700 rounded-full mx-auto mb-6 flex items-center justify-center shadow-lg">
-             <span className="text-4xl">🏆</span>
-           </div>
-           
-           <h2 className="text-3xl font-display font-bold text-white mb-2">Passe de Temporada Premium</h2>
-           <p className="text-gold font-bold uppercase tracking-widest text-xs mb-8">Para Donos de Time Sérios</p>
-
-           <div className="bg-black/40 rounded-2xl p-6 mb-8 border border-white/5">
-              <span className="block text-gray-400 text-sm mb-1">Assinatura Mensal</span>
-              <div className="flex justify-center items-end gap-1">
-                 <span className="text-sm font-bold text-gray-400 mb-2">R$</span>
-                 <span className="text-6xl font-display font-bold text-white">60</span>
-                 <span className="text-sm font-bold text-gray-400 mb-2">,00</span>
-              </div>
-           </div>
-
-           <div className="space-y-4 mb-8 text-left">
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-full bg-neon/10 flex items-center justify-center text-neon">✓</div>
-                 <p className="text-sm text-gray-300">Registro de Jogos Ilimitado</p>
-              </div>
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-full bg-neon/10 flex items-center justify-center text-neon">✓</div>
-                 <p className="text-sm text-gray-300">Gerencie até 22 Jogadores</p>
-              </div>
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-full bg-neon/10 flex items-center justify-center text-neon">✓</div>
-                 <p className="text-sm text-gray-300">Histórico de Dominação de Território</p>
-              </div>
-           </div>
-
-           <button 
-             onClick={handlePayment}
-             disabled={isLoading}
-             className="w-full bg-gradient-to-r from-neon to-green-600 text-black font-bold py-4 rounded-xl hover:shadow-[0_0_20px_rgba(57,255,20,0.4)] transition-all transform hover:scale-[1.02]"
-           >
-             {isLoading ? 'Processando Pagamento...' : 'Assinar e Criar Time'}
-           </button>
-           
-           <button onClick={() => setStep('ROLE_SELECTION')} className="mt-4 text-sm text-gray-500 hover:text-white">Voltar para Funções</button>
-        </div>
-      </div>
-    );
-  }
-
-  // Default: Login Screen
+  // Subscription screen could be kept if you want a registration flow, 
+  // but for "Login into account X", we mostly need the form.
+  
   return (
     <div className="min-h-screen bg-pitch-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -156,44 +74,33 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <p className="text-pitch-300">Conquiste o campo. Domine seu bairro.</p>
         </div>
 
-        <div className="space-y-4 mb-6">
-          <button 
-            onClick={() => setStep('ROLE_SELECTION')}
-            className="w-full bg-white text-pitch-950 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
-          >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
-            Continuar com Google
-          </button>
-          <button 
-             onClick={() => setStep('ROLE_SELECTION')}
-             className="w-full bg-black text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-900 transition-colors"
-          >
-            <img src="https://www.svgrepo.com/show/512317/github-142.svg" className="w-5 h-5 filter invert" alt="A" />
-            Continuar com Apple
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4 mb-6">
-          <div className="h-px bg-pitch-700 flex-1"></div>
-          <span className="text-pitch-500 text-sm font-bold uppercase">Ou via Email</span>
-          <div className="h-px bg-pitch-700 flex-1"></div>
-        </div>
-
         <form onSubmit={handleLoginSubmit} className="space-y-4">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold">
+              {error}
+            </div>
+          )}
+
           <div>
-            <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Endereço de Email</label>
+            <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Email</label>
             <input 
               type="email" 
-              className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
-              placeholder="artilheiro@fut.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none transition-colors"
+              placeholder="seu@email.com"
+              required
             />
           </div>
           <div>
             <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Senha</label>
             <input 
               type="password" 
-              className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none transition-colors"
               placeholder="••••••••"
+              required
             />
           </div>
 
@@ -207,6 +114,23 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             ) : 'Entrar no Vestiário'}
           </button>
         </form>
+
+        {/* Demo Helper - Useful for the user to test hierarchies */}
+        <div className="mt-8 border-t border-pitch-800 pt-6">
+          <p className="text-center text-gray-500 text-xs mb-4 uppercase font-bold">Contas de Teste (Clique para preencher)</p>
+          <div className="flex gap-2 justify-center">
+             <button onClick={() => fillDemo('owner')} className="bg-pitch-800 hover:bg-pitch-700 text-gold text-xs px-3 py-2 rounded-lg border border-gold/20">
+               👑 Dono
+             </button>
+             <button onClick={() => fillDemo('player')} className="bg-pitch-800 hover:bg-pitch-700 text-blue-400 text-xs px-3 py-2 rounded-lg border border-blue-400/20">
+               ⚽ Jogador
+             </button>
+             <button onClick={() => fillDemo('fan')} className="bg-pitch-800 hover:bg-pitch-700 text-gray-300 text-xs px-3 py-2 rounded-lg border border-gray-500/20">
+               🎫 Torcedor
+             </button>
+          </div>
+          <p className="text-center text-gray-600 text-[10px] mt-2">Senha para todos: 123</p>
+        </div>
       </div>
     </div>
   );

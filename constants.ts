@@ -1,30 +1,100 @@
 import { Team, Territory, User, UserRole, Post, Match } from './types';
 
-export const CURRENT_USER: User = {
-  id: 'u1',
-  name: 'Alex "O Artilheiro" Silva',
-  email: 'alex@futdomination.com',
-  role: UserRole.OWNER,
-  teamId: 't1',
-  avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026024d',
-  bio: 'Vivendo pelo gol. Capitão do Neon FC.',
-  location: 'São Paulo, Brasil',
-  following: ['t1'], // Follows their own team initially
-  badges: ['👑 Rei do Bairro', '🔥 Artilheiro'],
-  stats: {
-    matchesPlayed: 45,
-    goals: 32,
-    mvps: 5,
-    rating: 8.5
+// Mock Database of Users with Passwords for Authentication
+export const MOCK_AUTH_DB = [
+  {
+    id: 'u1',
+    name: 'Alex "O Artilheiro" Silva',
+    email: 'dono@fut.com',
+    password: '123',
+    role: UserRole.OWNER,
+    teamId: 't1',
+    avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026024d',
+    bio: 'Vivendo pelo gol. Capitão do Neon FC.',
+    location: 'São Paulo, Brasil',
+    following: ['t1'],
+    badges: ['👑 Rei do Bairro', '🔥 Artilheiro'],
+    stats: { matchesPlayed: 45, goals: 32, mvps: 5, rating: 8.5 }
+  },
+  {
+    id: 'u3',
+    name: 'Diego Paredão',
+    email: 'goleiro@fut.com',
+    password: '123',
+    role: UserRole.PLAYER,
+    teamId: 't1',
+    avatarUrl: 'https://i.pravatar.cc/150?u=u3',
+    bio: 'Ninguém passa.',
+    location: 'São Paulo, Brasil',
+    following: ['t1'],
+    badges: ['🧱 A Muralha'],
+    stats: { matchesPlayed: 40, goals: 0, mvps: 2, rating: 7.8 }
+  },
+  {
+    id: 'u4',
+    name: 'Lucas Ligeiro',
+    email: 'atacante@fut.com',
+    password: '123',
+    role: UserRole.PLAYER,
+    teamId: 't1',
+    avatarUrl: 'https://i.pravatar.cc/150?u=u4',
+    bio: 'Velocidade pura.',
+    location: 'São Paulo, Brasil',
+    following: ['t1'],
+    badges: [],
+    stats: { matchesPlayed: 38, goals: 12, mvps: 3, rating: 8.0 }
+  },
+  {
+    id: 'u5',
+    name: 'Bruno Maestro',
+    email: 'meia@fut.com',
+    password: '123',
+    role: UserRole.PLAYER,
+    teamId: 't1',
+    avatarUrl: 'https://i.pravatar.cc/150?u=u5',
+    bio: 'O cérebro do time.',
+    location: 'São Paulo, Brasil',
+    following: ['t1'],
+    badges: ['🧠 Playmaker'],
+    stats: { matchesPlayed: 42, goals: 5, mvps: 8, rating: 9.1 }
+  },
+  {
+    id: 'fan1',
+    name: 'João Torcedor',
+    email: 'torcedor@fut.com',
+    password: '123',
+    role: UserRole.FAN,
+    teamId: undefined, // Fans might not belong to a team directly
+    avatarUrl: 'https://i.pravatar.cc/150?u=fan1',
+    bio: 'Apaixonado por várzea.',
+    location: 'Osasco, Brasil',
+    following: ['t1', 't2'],
+    badges: ['📣 Super Fã'],
+    stats: undefined
+  },
+  {
+    id: 'u2',
+    name: 'Capitão Rival',
+    email: 'rival@fut.com',
+    password: '123',
+    role: UserRole.OWNER,
+    teamId: 't2',
+    avatarUrl: 'https://i.pravatar.cc/150?u=rival',
+    bio: 'Vamos dominar tudo.',
+    location: 'Rio de Janeiro, Brasil',
+    following: ['t2'],
+    badges: [],
+    stats: { matchesPlayed: 20, goals: 10, mvps: 1, rating: 7.5 }
   }
-};
-
-const MOCK_PLAYERS: User[] = [
-  CURRENT_USER,
-  { id: 'u3', name: 'Diego Paredão', email: 'd@test.com', role: UserRole.PLAYER, teamId: 't1', avatarUrl: 'https://i.pravatar.cc/150?u=u3', following: [], stats: { matchesPlayed: 40, goals: 0, mvps: 2, rating: 7.8 }, badges: ['🧱 A Muralha'] },
-  { id: 'u4', name: 'Lucas Ligeiro', email: 'l@test.com', role: UserRole.PLAYER, teamId: 't1', avatarUrl: 'https://i.pravatar.cc/150?u=u4', following: [], stats: { matchesPlayed: 38, goals: 12, mvps: 3, rating: 8.0 }, badges: [] },
-  { id: 'u5', name: 'Bruno Maestro', email: 'b@test.com', role: UserRole.PLAYER, teamId: 't1', avatarUrl: 'https://i.pravatar.cc/150?u=u5', following: [], stats: { matchesPlayed: 42, goals: 5, mvps: 8, rating: 9.1 }, badges: ['🧠 Playmaker'] },
 ];
+
+// Helper to get players for a team (derived from the auth db)
+const getPlayersForTeam = (teamId: string): User[] => {
+  return MOCK_AUTH_DB.filter(u => u.teamId === teamId);
+}
+
+// Fallback user for initial load if needed (though we will use auth now)
+export const CURRENT_USER = MOCK_AUTH_DB[0];
 
 export const MOCK_TEAMS: Team[] = [
   {
@@ -35,7 +105,7 @@ export const MOCK_TEAMS: Team[] = [
     losses: 2,
     draws: 1,
     territoryColor: '#39ff14', // Neon Green
-    players: MOCK_PLAYERS,
+    players: getPlayersForTeam('t1'),
     ownerId: 'u1',
     category: 'Society',
     homeTurf: 'Centro'
@@ -48,7 +118,7 @@ export const MOCK_TEAMS: Team[] = [
     losses: 5,
     draws: 3,
     territoryColor: '#ef4444', // Red
-    players: [],
+    players: getPlayersForTeam('t2'),
     ownerId: 'u2',
     category: 'Futsal',
     homeTurf: 'Zona Oeste'

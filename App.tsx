@@ -8,8 +8,8 @@ import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
-import { CURRENT_USER, MOCK_TEAMS, MOCK_TERRITORIES, MOCK_POSTS, MOCK_MATCHES } from './constants';
-import { UserRole } from './types';
+import { MOCK_TEAMS, MOCK_TERRITORIES, MOCK_POSTS, MOCK_MATCHES } from './constants';
+import { UserRole, User } from './types';
 
 // Reload Icon Component (Relicon)
 const ReloadButton = () => (
@@ -25,19 +25,28 @@ const ReloadButton = () => (
 );
 
 const App: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<UserRole>(UserRole.FAN); // Default to Fan until login
+  const [activeUser, setActiveUser] = useState<User | null>(null);
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
 
-  const handleLogin = (role: UserRole) => {
-    setUserRole(role);
-    setIsLoggedIn(true);
-    // On first login, default owner to team creation or team view, fan to map
-    setCurrentTab(role === UserRole.OWNER ? 'team' : 'map');
+  const handleLogin = (user: User) => {
+    setActiveUser(user);
+    // Determine default tab based on role
+    // Owner -> Team Management
+    // Player/Fan -> Map or Feed
+    if (user.role === UserRole.OWNER) {
+      setCurrentTab('team');
+    } else {
+      setCurrentTab('map');
+    }
   };
 
-  if (!isLoggedIn) {
+  const handleLogout = () => {
+    setActiveUser(null);
+    setCurrentTab('map');
+  };
+
+  if (!activeUser) {
     return (
       <>
         <Auth onLogin={handleLogin} />
@@ -46,10 +55,11 @@ const App: React.FC = () => {
     );
   }
 
-  // Simulate data based on role for the demo
-  // Ensure we merge the role into the current user mock
-  const activeUser = { ...CURRENT_USER, role: userRole };
+  // Find the team associated with the user (if any)
   const myTeam = MOCK_TEAMS.find(t => t.id === activeUser.teamId) || MOCK_TEAMS[0];
+
+  // Derive simple role for easier checks
+  const userRole = activeUser.role;
 
   return (
     <div className="min-h-screen bg-pitch-950 bg-mesh bg-fixed font-sans text-gray-100 overflow-x-hidden selection:bg-neon selection:text-black">
@@ -58,7 +68,7 @@ const App: React.FC = () => {
         currentTab={currentTab} 
         setCurrentTab={setCurrentTab} 
         userRole={userRole} 
-        onLogout={() => setIsLoggedIn(false)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area - Mobile Optimized */}
