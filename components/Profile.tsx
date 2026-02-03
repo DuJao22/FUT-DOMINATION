@@ -7,13 +7,52 @@ interface ProfileProps {
   user: User;
   matches: Match[];
   onUpdateUser?: (updatedUser: User) => void;
+  onLogout: () => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, onLogout }) => {
   const [newTeamName, setNewTeamName] = useState('');
   const [createError, setCreateError] = useState('');
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
 
+  // Edit Profile State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+      name: user.name,
+      bio: user.bio || '',
+      location: user.location || '',
+      avatarUrl: user.avatarUrl || ''
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // --- Profile Logic ---
+  const handleSaveProfile = async () => {
+      setIsSavingProfile(true);
+      try {
+          const updatedUser: User = {
+              ...user,
+              name: editForm.name,
+              bio: editForm.bio,
+              location: editForm.location,
+              avatarUrl: editForm.avatarUrl
+          };
+          
+          const success = await dbService.updateUserProfile(updatedUser);
+          if (success && onUpdateUser) {
+              onUpdateUser(updatedUser);
+              setIsEditingProfile(false);
+          } else {
+              alert("Erro ao salvar perfil. Tente novamente.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Erro de conexão.");
+      } finally {
+          setIsSavingProfile(false);
+      }
+  };
+
+  // --- Team Logic ---
   const handleCreateTeam = async () => {
     setCreateError('');
     
@@ -89,8 +128,85 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
   };
 
   return (
-    <div className="space-y-8 pb-24">
+    <div className="space-y-8 pb-24 relative">
       
+      {/* Header Actions */}
+      <div className="absolute top-0 right-0 z-50 flex gap-2">
+           <button 
+              onClick={() => setIsEditingProfile(true)}
+              className="bg-pitch-900/80 backdrop-blur p-2 rounded-full border border-white/10 hover:border-neon text-gray-400 hover:text-neon transition-colors"
+              title="Editar Perfil"
+           >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+           </button>
+           <button 
+              onClick={onLogout}
+              className="bg-pitch-900/80 backdrop-blur p-2 rounded-full border border-white/10 hover:border-red-500 text-gray-400 hover:text-red-500 transition-colors"
+              title="Sair da Conta"
+           >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+           </button>
+      </div>
+
+      {/* --- EDIT MODAL --- */}
+      {isEditingProfile && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+              <div className="bg-pitch-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scaleIn">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold text-white">Editar Perfil</h3>
+                      <button onClick={() => setIsEditingProfile(false)} className="text-gray-400 hover:text-white">✕</button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-pitch-300 uppercase mb-1">Nome de Exibição</label>
+                          <input 
+                            type="text" 
+                            value={editForm.name} 
+                            onChange={e => setEditForm({...editForm, name: e.target.value})}
+                            className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-pitch-300 uppercase mb-1">Localização</label>
+                          <input 
+                            type="text" 
+                            value={editForm.location} 
+                            onChange={e => setEditForm({...editForm, location: e.target.value})}
+                            className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+                          />
+                      </div>
+                       <div>
+                          <label className="block text-xs font-bold text-pitch-300 uppercase mb-1">Bio</label>
+                          <textarea 
+                            value={editForm.bio} 
+                            onChange={e => setEditForm({...editForm, bio: e.target.value})}
+                            className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none h-24 resize-none"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-pitch-300 uppercase mb-1">Avatar URL</label>
+                          <input 
+                            type="text" 
+                            value={editForm.avatarUrl} 
+                            onChange={e => setEditForm({...editForm, avatarUrl: e.target.value})}
+                            className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-xs text-gray-300 focus:border-neon focus:outline-none"
+                            placeholder="https://..."
+                          />
+                      </div>
+
+                      <button 
+                        onClick={handleSaveProfile}
+                        disabled={isSavingProfile}
+                        className="w-full bg-neon text-black font-bold py-3 rounded-xl mt-4 hover:bg-white transition-colors"
+                      >
+                          {isSavingProfile ? 'Salvando...' : 'Salvar Alterações'}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* --- SECTION: UPGRADE TO OWNER (Visible only to Fans/Players) --- */}
       {user.role !== UserRole.OWNER && (
          <div className="bg-gradient-to-r from-indigo-900 to-pitch-900 rounded-[2rem] p-8 border border-neon/30 shadow-[0_0_30px_rgba(57,255,20,0.1)] relative overflow-hidden animate-[fadeIn_0.5s]">
@@ -126,7 +242,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
       )}
 
       {/* Player Card (Premium Holo Effect) */}
-      <div className="relative mx-auto max-w-sm group perspective-1000">
+      <div className="relative mx-auto max-w-sm group perspective-1000 mt-12">
          {/* Animated Glow Behind */}
          <div className="absolute -inset-1 bg-gradient-to-r from-neon via-blue-500 to-purple-600 rounded-[2.2rem] blur opacity-40 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
          
@@ -154,12 +270,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser })
                  
                  <div className="relative w-48 h-48 mx-auto mb-2 z-10">
                      <div className="absolute inset-0 bg-neon/20 rounded-full blur-[50px] opacity-50"></div>
-                     <img src={user.avatarUrl} className="w-full h-full object-cover drop-shadow-[0_20px_20px_rgba(0,0,0,0.8)] z-20 relative" style={{ clipPath: 'polygon(50% 0, 100% 25%, 100% 100%, 0 100%, 0 25%)' }} />
+                     <img src={user.avatarUrl} className="w-full h-full object-cover drop-shadow-[0_20px_20px_rgba(0,0,0,0.8)] z-20 relative rounded-xl" />
                  </div>
                  
-                 <h2 className="text-4xl font-display font-bold text-center uppercase tracking-wider mb-6 pb-2 border-b border-white/10 relative z-10">
+                 <h2 className="text-4xl font-display font-bold text-center uppercase tracking-wider mb-2 pb-2 border-b border-white/10 relative z-10">
                     {user.name}
                  </h2>
+                 <p className="text-center text-gray-400 text-xs uppercase tracking-widest mb-4 relative z-10">{user.bio || "Sem biografia..."}</p>
                  
                  <div className="grid grid-cols-3 gap-2 text-center relative z-10">
                      <div className="p-2 rounded-lg bg-white/5 border border-white/5">

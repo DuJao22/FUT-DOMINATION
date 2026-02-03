@@ -249,6 +249,19 @@ class DatabaseService {
       }
   }
 
+  async updateUserProfile(user: User): Promise<boolean> {
+      try {
+          await this.query(
+              `UPDATE ${TABLES.USERS} SET name = ?, bio = ?, location = ?, avatar_url = ? WHERE id = ?`,
+              [user.name, user.bio, user.location, user.avatarUrl, user.id]
+          );
+          return true;
+      } catch (e) {
+          console.error("Update Profile Failed:", e);
+          return false;
+      }
+  }
+
   // --- TEAM METHODS ---
 
   async createTeam(team: Team): Promise<boolean> {

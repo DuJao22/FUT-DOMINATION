@@ -227,7 +227,7 @@ const App: React.FC = () => {
             {currentTab === 'studio' && <GenAIStudio />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
-            {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} />}
+            {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} />}
           </div>
 
