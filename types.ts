@@ -33,6 +33,10 @@ export interface User {
   position?: 'GK' | 'DEF' | 'MID' | 'FWD'; 
   isStarter?: boolean;
   shirtNumber?: number;
+  
+  // Custom Lineup Coordinates (0-100%)
+  lineupX?: number; 
+  lineupY?: number;
 }
 
 export type TeamCategory = 'Sub-15' | 'Sub-17' | 'Sub-20' | 'Adulto/Livre' | 'Veterano' | 'Society' | 'Futsal';

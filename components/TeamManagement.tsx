@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Team, UserRole, User } from '../types';
 import { dbService } from '../services/database';
 
@@ -15,21 +15,58 @@ const POSITION_LABELS: Record<string, string> = {
     'FWD': 'Atacante'
 };
 
-// Helper for field placement (Society 7-a-side approximation)
-const POSITION_COORDS: Record<string, { top: string, left: string }[]> = {
-    'GK': [{ top: '85%', left: '50%' }],
-    'DEF': [{ top: '65%', left: '30%' }, { top: '65%', left: '70%' }],
-    'MID': [{ top: '45%', left: '50%' }, { top: '45%', left: '20%' }, { top: '45%', left: '80%' }],
-    'FWD': [{ top: '20%', left: '50%' }]
+// --- FORMATION PRESETS ---
+// Coordinates are in % [top, left] relative to a vertical field
+const FORMATIONS: Record<string, { label: string, coords: {top: number, left: number}[] }> = {
+    '3-3-1': { 
+        label: '3-3-1 (Society)',
+        coords: [
+            { top: 90, left: 50 }, // GK
+            { top: 70, left: 20 }, { top: 70, left: 50 }, { top: 70, left: 80 }, // 3 DEF
+            { top: 45, left: 20 }, { top: 45, left: 50 }, { top: 45, left: 80 }, // 3 MID
+            { top: 20, left: 50 }, // 1 FWD
+        ]
+    },
+    '2-3-1': {
+        label: '2-3-1 (Society)',
+        coords: [
+            { top: 90, left: 50 }, // GK
+            { top: 70, left: 30 }, { top: 70, left: 70 }, // 2 DEF
+            { top: 45, left: 20 }, { top: 45, left: 50 }, { top: 45, left: 80 }, // 3 MID
+            { top: 20, left: 50 }, // 1 FWD
+        ]
+    },
+    '4-4-2': {
+        label: '4-4-2 (Campo)',
+        coords: [
+            { top: 92, left: 50 }, // GK
+            { top: 75, left: 15 }, { top: 75, left: 38 }, { top: 75, left: 62 }, { top: 75, left: 85 }, // 4 DEF
+            { top: 50, left: 15 }, { top: 50, left: 38 }, { top: 50, left: 62 }, { top: 50, left: 85 }, // 4 MID
+            { top: 20, left: 35 }, { top: 20, left: 65 }, // 2 FWD
+        ]
+    },
+    '4-3-3': {
+        label: '4-3-3 (Campo)',
+        coords: [
+            { top: 92, left: 50 }, // GK
+            { top: 75, left: 15 }, { top: 75, left: 38 }, { top: 75, left: 62 }, { top: 75, left: 85 }, // 4 DEF
+            { top: 50, left: 30 }, { top: 55, left: 50 }, { top: 50, left: 70 }, // 3 MID
+            { top: 20, left: 20 }, { top: 15, left: 50 }, { top: 20, left: 80 }, // 3 FWD
+        ]
+    }
 };
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUserRole }) => {
   const [activeTab, setActiveTab] = useState<'roster' | 'lineup'>('roster');
   const maxPlayers = 22;
   const isOwner = currentUserRole === UserRole.OWNER;
+  const fieldRef = useRef<HTMLDivElement>(null);
   
   // Local state to handle UI updates immediately
   const [localTeam, setLocalTeam] = useState<Team>(team);
+
+  // --- DRAG & DROP STATE ---
+  const [draggedPlayerId, setDraggedPlayerId] = useState<string | null>(null);
 
   // --- EDIT TEAM INFO STATE ---
   const [isEditingName, setIsEditingName] = useState(false);
@@ -59,13 +96,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       if (!logoUrlInput.trim()) return;
       setLocalTeam(prev => ({ ...prev, logoUrl: logoUrlInput }));
       setIsEditingLogo(false);
-      // In a real app, call dbService.updateTeam(...) here
   };
 
   const handleSaveName = () => {
     setLocalTeam(prev => ({ ...prev, name: teamName }));
     setIsEditingName(false);
-    // In a real app, call dbService.updateTeam(...) here
   };
 
   const openPlayerEdit = (player: User) => {
@@ -134,20 +169,86 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       setInviteStatus({ type: 'success', msg: 'Link copiado! Envie para seus amigos.' });
   };
 
+  // --- DRAG AND DROP HANDLERS ---
+  const handleDragStart = (e: React.DragEvent, playerId: string) => {
+      if (!isOwner) return;
+      setDraggedPlayerId(playerId);
+      e.dataTransfer.effectAllowed = 'move';
+      // Optional: Set ghost image
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault(); // Essential to allow dropping
+      e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      if (!draggedPlayerId || !fieldRef.current || !isOwner) return;
+
+      const rect = fieldRef.current.getBoundingClientRect();
+      // Handle both mouse and touch events logic if expanded, here standard drag API uses mouse coordinates
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+
+      // Calculate percentage position
+      const offsetX = clientX - rect.left;
+      const offsetY = clientY - rect.top;
+      
+      const percentX = (offsetX / rect.width) * 100;
+      const percentY = (offsetY / rect.height) * 100;
+
+      // Clamp values 0-100 to keep inside field
+      const clampedX = Math.max(0, Math.min(100, percentX));
+      const clampedY = Math.max(0, Math.min(100, percentY));
+
+      setLocalTeam(prev => ({
+          ...prev,
+          players: prev.players.map(p => 
+              p.id === draggedPlayerId 
+              ? { ...p, lineupX: clampedX, lineupY: clampedY } 
+              : p
+          )
+      }));
+      setDraggedPlayerId(null);
+  };
+
+  // --- FORMATION HANDLER ---
+  const applyFormation = (formationKey: string) => {
+      const formation = FORMATIONS[formationKey];
+      if (!formation) return;
+
+      const starters = localTeam.players.filter(p => p.isStarter);
+      
+      // Sort starters logic: GK first, then DEF, MID, FWD to map correctly to formation slots
+      const sortedStarters = [...starters].sort((a, b) => {
+          const order = { 'GK': 0, 'DEF': 1, 'MID': 2, 'FWD': 3 };
+          return (order[a.position || 'MID'] || 2) - (order[b.position || 'MID'] || 2);
+      });
+
+      const updatedPlayers = localTeam.players.map(p => {
+          // If not starter, keep as is
+          if (!p.isStarter) return p;
+          
+          const index = sortedStarters.findIndex(s => s.id === p.id);
+          // If we have a slot in the formation for this starter
+          if (index !== -1 && index < formation.coords.length) {
+              return {
+                  ...p,
+                  lineupY: formation.coords[index].top,
+                  lineupX: formation.coords[index].left
+              };
+          }
+          // Starter but no slot (e.g. 12th man), put on bench/side
+          return p;
+      });
+
+      setLocalTeam(prev => ({ ...prev, players: updatedPlayers }));
+  };
+
   // Lineup Logic
   const starters = localTeam.players.filter(p => p.isStarter);
   const currentPlayers = localTeam.players.length;
-  
-  // Simple auto-assigner for visualization if coords run out
-  const getPlayerPositionStyle = (player: User, index: number) => {
-     if (player.position && POSITION_COORDS[player.position]) {
-         // Try to find a slot based on how many of this role we have
-         const roleIndex = starters.filter((p, i) => i < index && p.position === player.position).length;
-         const coords = POSITION_COORDS[player.position][roleIndex % POSITION_COORDS[player.position].length];
-         return coords || { top: '50%', left: '50%' };
-     }
-     return { top: '50%', left: '50%' };
-  };
 
   return (
     <div className="space-y-8 pb-24">
@@ -243,7 +344,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
             onClick={() => setActiveTab('lineup')}
             className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${activeTab === 'lineup' ? 'bg-pitch-900 text-blue-400 shadow-lg border border-blue-500/20' : 'text-gray-400 hover:text-white'}`}
         >
-            ESCALAÇÃO (TITULARES)
+            PRANCHETA TÁTICA
         </button>
       </div>
 
@@ -316,19 +417,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                                 <p className="text-[10px] text-gray-600">Toque para convidar</p>
                             </div>
                         </button>
-                         <button 
-                            onClick={() => setShowInviteModal(true)}
-                            className="flex items-center gap-4 bg-black/20 border border-dashed border-white/10 p-3 rounded-2xl group hover:border-neon/50 hover:bg-neon/5 transition-all"
-                        >
-                            <div className="w-8 text-center"></div>
-                            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 group-hover:border-neon group-hover:text-neon text-gray-500 transition-colors">
-                                <span className="text-2xl font-bold">+</span>
-                            </div>
-                            <div className="flex-1 text-left">
-                                <h4 className="text-gray-500 font-bold group-hover:text-neon transition-colors">Vaga Aberta</h4>
-                                <p className="text-[10px] text-gray-600">Toque para convidar</p>
-                            </div>
-                        </button>
                      </>
                  )}
              </div>
@@ -338,39 +426,78 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       {/* --- LINEUP VIEW (FIELD) --- */}
       {activeTab === 'lineup' && (
           <div className="animate-[fadeIn_0.3s]">
-              <div className="relative aspect-[3/4] md:aspect-video w-full bg-[#1a472a] rounded-[2rem] border-4 border-pitch-900 shadow-2xl overflow-hidden mb-4">
-                  {/* Field Markings */}
-                  <div className="absolute inset-4 border-2 border-white/20 rounded-xl"></div>
-                  <div className="absolute top-1/2 left-0 right-0 h-px bg-white/20"></div>
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/20"></div>
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-16 border-b-2 border-x-2 border-white/20 rounded-b-xl"></div>
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-16 border-t-2 border-x-2 border-white/20 rounded-t-xl"></div>
+              
+              {/* Formation Selector */}
+              {isOwner && (
+                  <div className="mb-4 overflow-x-auto">
+                      <div className="flex gap-2 pb-2">
+                          <div className="text-[10px] text-gray-400 uppercase font-bold self-center mr-2">Formações Rápidas:</div>
+                          {Object.entries(FORMATIONS).map(([key, data]) => (
+                              <button
+                                key={key}
+                                onClick={() => applyFormation(key)}
+                                className="bg-white/5 border border-white/10 hover:bg-neon/10 hover:border-neon hover:text-neon text-gray-300 text-xs font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap"
+                              >
+                                  {data.label}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              {/* FIELD CONTAINER */}
+              <div 
+                ref={fieldRef}
+                className="relative aspect-[3/4] w-full bg-[#1a472a] rounded-[2rem] border-4 border-pitch-900 shadow-2xl overflow-hidden mb-4 select-none touch-none"
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                  {/* Field Markings (Vertical / Portrait) */}
+                  <div className="absolute inset-4 border-2 border-white/20 rounded-xl pointer-events-none"></div>
+                  
+                  {/* Halfway Line */}
+                  <div className="absolute top-1/2 left-0 right-0 h-px bg-white/20 pointer-events-none"></div>
+                  
+                  {/* Center Circle */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/20 pointer-events-none"></div>
+                  
+                  {/* Penalty Areas */}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-20 border-b-2 border-x-2 border-white/20 rounded-b-xl pointer-events-none"></div>
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-20 border-t-2 border-x-2 border-white/20 rounded-t-xl pointer-events-none"></div>
                   
                   {/* Grass Pattern */}
-                  <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.1)_1px,transparent_1px)] bg-[size:20px_20px] opacity-20"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.1)_1px,transparent_1px)] bg-[size:20px_20px] opacity-20 pointer-events-none"></div>
 
                   {/* Players on Field */}
                   {starters.length === 0 ? (
                       <div className="absolute inset-0 flex items-center justify-center">
-                          <p className="bg-black/50 text-white px-4 py-2 rounded-lg backdrop-blur">Nenhum titular definido</p>
+                          <p className="bg-black/50 text-white px-4 py-2 rounded-lg backdrop-blur">Nenhum titular definido. Vá em 'Elenco' e marque os titulares.</p>
                       </div>
                   ) : (
-                      starters.map((player, idx) => {
-                          const style = getPlayerPositionStyle(player, idx);
+                      starters.map((player) => {
+                          const hasCustomPos = player.lineupX !== undefined && player.lineupY !== undefined;
+                          const left = hasCustomPos ? `${player.lineupX}%` : '50%';
+                          const top = hasCustomPos ? `${player.lineupY}%` : '50%';
+                          
                           return (
                               <div 
                                 key={player.id} 
-                                className="absolute flex flex-col items-center transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 hover:scale-110 cursor-pointer z-10"
-                                style={style}
-                                onClick={() => openPlayerEdit(player)}
+                                className={`absolute flex flex-col items-center transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-100 z-10 ${isOwner ? 'cursor-move hover:scale-110 active:scale-125' : 'cursor-default'}`}
+                                style={{ left, top }}
+                                draggable={isOwner}
+                                onDragStart={(e) => handleDragStart(e, player.id)}
+                                onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    if(isOwner) openPlayerEdit(player);
+                                }}
                               >
-                                  <div className="w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg bg-gray-800 overflow-hidden relative">
-                                      <img src={player.avatarUrl} className="w-full h-full object-cover" />
+                                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg bg-gray-800 overflow-hidden relative ${draggedPlayerId === player.id ? 'opacity-50' : 'opacity-100'}`}>
+                                      <img src={player.avatarUrl} className="w-full h-full object-cover pointer-events-none" />
                                   </div>
-                                  <div className="mt-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold text-white text-center min-w-[60px] border border-white/10">
+                                  <div className="mt-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold text-white text-center min-w-[60px] border border-white/10 pointer-events-none truncate max-w-[80px]">
                                       {player.name}
                                   </div>
-                                  <div className="mt-0.5 text-[8px] font-bold text-neon uppercase bg-black px-1 rounded">
+                                  <div className="mt-0.5 text-[8px] font-bold text-neon uppercase bg-black px-1 rounded pointer-events-none border border-neon/50">
                                       {player.shirtNumber || '-'}
                                   </div>
                               </div>
@@ -378,7 +505,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                       })
                   )}
               </div>
-              <p className="text-center text-xs text-gray-500">Toque em um jogador na lista para defini-lo como titular.</p>
+              <p className="text-center text-xs text-gray-500">
+                  {isOwner ? (
+                      <span>
+                        Arraste para posicionar. <span className="text-neon font-bold">Duplo clique</span> no jogador para editar número e função.
+                      </span>
+                  ) : 'Visualização da formação tática.'}
+              </p>
           </div>
       )}
 
