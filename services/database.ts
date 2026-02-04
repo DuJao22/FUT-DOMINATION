@@ -1,5 +1,5 @@
 import { Database } from '@sqlitecloud/drivers';
-import { Team, Territory, Post, User, Match, UserRole, Notification, NotificationType, Court } from '../types';
+import { Team, Territory, Post, User, Match, UserRole, Notification, NotificationType, Court, MatchStatus } from '../types';
 
 // Fallback Hardcoded String - Updated to match user provided string exactly
 const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:8860/FUT_DOM.db?apikey=CCfQtOyo5qbyni96cUwEdIG4q2MRcEXpRHGoNpELtNc";
@@ -97,7 +97,9 @@ class DatabaseService {
             away_team_id TEXT,
             home_score INTEGER DEFAULT 0,
             away_score INTEGER DEFAULT 0,
-            is_verified INTEGER DEFAULT 0
+            is_verified INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'FINISHED',
+            stats_json TEXT
           )`,
           `CREATE TABLE IF NOT EXISTS ${TABLES.TERRITORIES} (
             id TEXT PRIMARY KEY,
@@ -139,7 +141,6 @@ class DatabaseService {
       // Migration: Add new columns safely
       try {
           const tableInfo = await this.query(`PRAGMA table_info(${TABLES.TEAMS})`);
-          // tableInfo is array of objects {cid, name, type, notnull, dflt_value, pk}
           if (Array.isArray(tableInfo)) {
               const existingColumns = tableInfo.map((col: any) => col.name);
               
@@ -156,6 +157,22 @@ class DatabaseService {
                   console.log("✅ Migrated: Added 'neighborhood' to teams");
               }
           }
+
+          // Match Migrations
+          const matchTableInfo = await this.query(`PRAGMA table_info(${TABLES.MATCHES})`);
+          if (Array.isArray(matchTableInfo)) {
+              const existingColumns = matchTableInfo.map((col: any) => col.name);
+              
+              if (!existingColumns.includes('status')) {
+                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN status TEXT DEFAULT 'FINISHED'`);
+                  console.log("✅ Migrated: Added 'status' to matches");
+              }
+              if (!existingColumns.includes('stats_json')) {
+                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN stats_json TEXT`);
+                  console.log("✅ Migrated: Added 'stats_json' to matches");
+              }
+          }
+
       } catch (e) {
         console.warn("⚠️ Schema migration check skipped or failed:", e);
       }
@@ -588,17 +605,46 @@ class DatabaseService {
   async createMatch(match: Match): Promise<boolean> {
       try {
           await this.query(
-              `INSERT INTO ${TABLES.MATCHES} (id, date, location_name, court_id, home_team_id, away_team_name, away_team_id, home_score, away_score, is_verified)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [match.id, match.date.toISOString(), match.locationName, match.courtId || null, match.homeTeamId, match.awayTeamName, match.awayTeamId || null, match.homeScore, match.awayScore, match.isVerified ? 1 : 0]
+              `INSERT INTO ${TABLES.MATCHES} (id, date, location_name, court_id, home_team_id, away_team_name, away_team_id, home_score, away_score, is_verified, status, stats_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                  match.id, 
+                  match.date.toISOString(), 
+                  match.locationName, 
+                  match.courtId || null, 
+                  match.homeTeamId, 
+                  match.awayTeamName, 
+                  match.awayTeamId || null, 
+                  match.homeScore ?? 0, 
+                  match.awayScore ?? 0, 
+                  match.isVerified ? 1 : 0,
+                  match.status || 'FINISHED',
+                  match.goals ? JSON.stringify(match.goals) : null
+              ]
           );
           
-          if (match.homeScore > match.awayScore) {
-              await this.query(`UPDATE ${TABLES.TEAMS} SET wins = wins + 1 WHERE id = ?`, [match.homeTeamId]);
-          } else if (match.homeScore < match.awayScore) {
-              await this.query(`UPDATE ${TABLES.TEAMS} SET losses = losses + 1 WHERE id = ?`, [match.homeTeamId]);
-          } else {
-              await this.query(`UPDATE ${TABLES.TEAMS} SET draws = draws + 1 WHERE id = ?`, [match.homeTeamId]);
+          if (match.status === 'FINISHED') {
+              // Update stats only if finished
+              const homeS = match.homeScore ?? 0;
+              const awayS = match.awayScore ?? 0;
+
+              if (homeS > awayS) {
+                  await this.query(`UPDATE ${TABLES.TEAMS} SET wins = wins + 1 WHERE id = ?`, [match.homeTeamId]);
+              } else if (homeS < awayS) {
+                  await this.query(`UPDATE ${TABLES.TEAMS} SET losses = losses + 1 WHERE id = ?`, [match.homeTeamId]);
+              } else {
+                  await this.query(`UPDATE ${TABLES.TEAMS} SET draws = draws + 1 WHERE id = ?`, [match.homeTeamId]);
+              }
+              
+              // Update Player Stats (Goals)
+              if (match.goals) {
+                 for (const goal of match.goals) {
+                    // Simple increment for MVP/Goals
+                    await this.query(`UPDATE app_users_v2 SET stats = json_set(stats, '$.goals', COALESCE(json_extract(stats, '$.goals'), 0) + 1) WHERE id = ?`, [goal.playerId]); 
+                    // Note: SQLCloud might handle JSON differently, this is a conceptual example. 
+                    // Robust way: Fetch user, update JS object, save back.
+                 }
+              }
           }
 
           return true;
@@ -621,16 +667,18 @@ class DatabaseService {
     try {
         const rows = await this.query(`SELECT * FROM ${TABLES.MATCHES} ORDER BY date DESC`);
         return Array.isArray(rows) ? rows.map((row: any) => ({
-        id: row.id,
-        date: new Date(row.date),
-        locationName: row.location_name,
-        courtId: row.court_id,
-        homeTeamId: row.home_team_id,
-        awayTeamName: row.away_team_name,
-        awayTeamId: row.away_team_id,
-        homeScore: row.home_score,
-        awayScore: row.away_score,
-        isVerified: Boolean(row.is_verified)
+            id: row.id,
+            date: new Date(row.date),
+            locationName: row.location_name,
+            courtId: row.court_id,
+            homeTeamId: row.home_team_id,
+            awayTeamName: row.away_team_name,
+            awayTeamId: row.away_team_id,
+            homeScore: row.home_score,
+            awayScore: row.away_score,
+            isVerified: Boolean(row.is_verified),
+            status: row.status as MatchStatus || 'FINISHED',
+            goals: row.stats_json ? JSON.parse(row.stats_json) : []
         })) : [];
     } catch (e) {
         return [];

@@ -81,6 +81,15 @@ export interface Court {
   registeredByTeamId: string;
 }
 
+export type MatchStatus = 'SCHEDULED' | 'FINISHED' | 'PENDING';
+
+export interface MatchGoal {
+    playerId: string;
+    playerName: string;
+    minute?: number;
+    teamId: string;
+}
+
 export interface Match {
   id: string;
   date: Date;
@@ -89,9 +98,16 @@ export interface Match {
   homeTeamId: string;
   awayTeamName: string; // Kept for legacy or non-platform teams
   awayTeamId?: string;  // Link to platform team
-  homeScore: number;
-  awayScore: number;
+  
+  // Scores can be optional if scheduled
+  homeScore?: number;
+  awayScore?: number;
+  
+  status: MatchStatus;
   isVerified: boolean;
+
+  // New: List of goals for detailed stats
+  goals?: MatchGoal[];
 }
 
 export interface Comment {
