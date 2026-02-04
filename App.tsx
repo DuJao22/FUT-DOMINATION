@@ -15,7 +15,7 @@ import { TransferMarket } from './components/TransferMarket';
 import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay'; // NEW
 import { MOCK_POSTS } from './constants'; 
-import { UserRole, User, Team, Match, Territory } from './types';
+import { UserRole, User, Team, Match, Territory, Court, PickupGame } from './types';
 import { dbService } from './services/database';
 
 const App: React.FC = () => {
@@ -35,6 +35,8 @@ const App: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
+  const [courts, setCourts] = useState<Court[]>([]);
+  const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
 
   // --- INITIALIZATION & SESSION ---
   useEffect(() => {
@@ -44,15 +46,19 @@ const App: React.FC = () => {
             await dbService.initSchema();
 
             // 2. Fetch Real Data
-            const [fetchedTeams, fetchedMatches, fetchedTerritories] = await Promise.all([
+            const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
                 dbService.getTeams(),
                 dbService.getMatches(),
-                dbService.getTerritories()
+                dbService.getTerritories(),
+                dbService.getCourts(),
+                dbService.getPickupGames()
             ]);
 
             setTeams(fetchedTeams);
             setMatches(fetchedMatches);
             setTerritories(fetchedTerritories);
+            setCourts(fetchedCourts);
+            setPickupGames(fetchedPickup);
 
             // 3. Restore Session
             const storedUserId = localStorage.getItem('fut_dom_user_id');
@@ -102,14 +108,18 @@ const App: React.FC = () => {
 
   // Refresh data helper
   const refreshData = async () => {
-      const [fetchedTeams, fetchedMatches, fetchedTerritories] = await Promise.all([
+      const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
         dbService.getTeams(),
         dbService.getMatches(),
-        dbService.getTerritories()
+        dbService.getTerritories(),
+        dbService.getCourts(),
+        dbService.getPickupGames()
       ]);
       setTeams(fetchedTeams);
       setMatches(fetchedMatches);
       setTerritories(fetchedTerritories);
+      setCourts(fetchedCourts);
+      setPickupGames(fetchedPickup);
       
       // Update active user info if needed
       if(activeUser) {
@@ -335,7 +345,12 @@ const App: React.FC = () => {
                     </div>
                  )}
 
-                 <TerritoryMap territories={territories} teams={teams} />
+                 <TerritoryMap 
+                    territories={territories} 
+                    teams={teams} 
+                    courts={courts}
+                    pickupGames={pickupGames}
+                 />
              </div>
           )}
 
