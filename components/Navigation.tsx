@@ -13,6 +13,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
     { id: 'map', label: 'Mapa', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
     )},
+    { id: 'market', label: 'Mercado', icon: (active: boolean) => (
+       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>
+    )},
     { id: 'team', label: 'Meu Time', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
     )},
@@ -75,7 +78,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
 
       {/* MOBILE DOCK (Hidden on desktop) */}
       <nav className="md:hidden fixed bottom-5 left-4 right-4 h-20 z-[900]">
-        <div className="absolute inset-0 bg-pitch-950/90 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] flex justify-between items-center px-6 overflow-hidden">
+        <div className="absolute inset-0 bg-pitch-950/90 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] flex justify-between items-center px-4 overflow-hidden">
           
           {/* Subtle gradient overlay */}
           <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
@@ -86,7 +89,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
               <button
                 key={item.id}
                 onClick={() => setCurrentTab(item.id)}
-                className="group relative flex flex-col items-center justify-center w-14 h-full"
+                className="group relative flex flex-col items-center justify-center w-12 h-full"
               >
                 {/* Active Light Beam Background */}
                 {isActive && (

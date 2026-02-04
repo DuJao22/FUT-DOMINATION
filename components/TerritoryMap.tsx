@@ -18,11 +18,18 @@ const createCustomIcon = (team: Team | undefined, territoryPoints: number) => {
     className: 'custom-marker',
     html: `
       <div class="relative w-12 h-12 flex items-center justify-center">
-        <!-- Conquest Animation: Radiating Ping Effect -->
-        ${team ? `<div class="absolute inset-0 rounded-full opacity-75 animate-ping" style="background-color: ${color}"></div>` : ''}
+        
+        <!-- VIBRANT CONQUEST ANIMATION (Only if Team exists) -->
+        ${team ? `
+          <!-- Outer Expanding Ring (Ping) -->
+          <div class="absolute -inset-4 rounded-full opacity-60 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" style="background-color: ${color}"></div>
+          
+          <!-- Inner Pulsing Glow -->
+          <div class="absolute -inset-1 rounded-full opacity-40 animate-pulse blur-sm" style="background-color: ${color}"></div>
+        ` : ''}
         
         <!-- Static Glow background -->
-        <div class="absolute inset-0 rounded-full opacity-30 blur-md" style="background-color: ${color}"></div>
+        <div class="absolute inset-0 rounded-full opacity-20 blur-md" style="background-color: ${color}"></div>
         
         <!-- Main Marker Container -->
         <div class="relative w-12 h-12 rounded-full border-2 bg-black overflow-hidden flex items-center justify-center group hover:scale-110 transition-transform duration-300 z-10" style="border-color: ${color}; box-shadow: 0 0 15px ${color}">

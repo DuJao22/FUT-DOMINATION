@@ -60,12 +60,26 @@ export interface Territory {
   points: number; // Value of the territory
 }
 
+export interface Court {
+  id: string;
+  name: string;
+  address: string;
+  cep: string;
+  number: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  registeredByTeamId: string;
+}
+
 export interface Match {
   id: string;
   date: Date;
   locationName: string;
+  courtId?: string; // Optional link to a registered court
   homeTeamId: string;
-  awayTeamName: string; // Simplified for MVP if away team isn't on platform
+  awayTeamName: string; // Kept for legacy or non-platform teams
+  awayTeamId?: string;  // Link to platform team
   homeScore: number;
   awayScore: number;
   isVerified: boolean;
@@ -98,3 +112,22 @@ export interface Post {
 }
 
 export type ImageResolution = '1K' | '2K' | '4K';
+
+// --- NEW NOTIFICATION TYPES ---
+export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM';
+
+export interface Notification {
+  id: string;
+  userId: string; // Recipient
+  type: NotificationType;
+  title: string;
+  message: string;
+  relatedId?: string; // ID of the user/team involved
+  relatedImage?: string; // Avatar or Logo
+  read: boolean;
+  timestamp: Date;
+  actionData?: {
+      teamId?: string;
+      playerId?: string;
+  };
+}

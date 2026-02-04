@@ -9,6 +9,8 @@ import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
+import { TransferMarket } from './components/TransferMarket';
+import { NotificationsModal } from './components/NotificationsModal';
 import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory } from './types';
 import { dbService } from './services/database';
@@ -30,6 +32,9 @@ const App: React.FC = () => {
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
+  
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -63,9 +68,9 @@ const App: React.FC = () => {
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
-                    if (user.role === UserRole.OWNER) {
-                         // Only force tab if they finished onboarding, otherwise Onboarding takes precedence
-                         if (user.onboardingCompleted) setCurrentTab('team');
+                    checkNotifications(user.id); // Check notifs on load
+                    if (user.role === UserRole.OWNER && user.onboardingCompleted) {
+                        setCurrentTab('team');
                     }
                 } else {
                     localStorage.removeItem('fut_dom_user_id');
@@ -82,6 +87,11 @@ const App: React.FC = () => {
     initApp();
   }, []);
 
+  const checkNotifications = async (userId: string) => {
+      const notifs = await dbService.getNotifications(userId);
+      setHasUnread(notifs.some(n => !n.read));
+  };
+
   // Refresh data helper
   const refreshData = async () => {
       const [fetchedTeams, fetchedMatches, fetchedTerritories] = await Promise.all([
@@ -97,6 +107,7 @@ const App: React.FC = () => {
       if(activeUser) {
           const updatedUser = await dbService.getUserById(activeUser.id);
           if(updatedUser) setActiveUser(updatedUser);
+          checkNotifications(activeUser.id);
       }
   };
 
@@ -193,6 +204,8 @@ const App: React.FC = () => {
 
       {/* Main Content Area - md:ml-64 ensures space for fixed sidebar on desktop */}
       <main className="md:ml-64 w-full min-h-screen relative pb-28 md:pb-8 transition-all duration-300">
+        
+        {/* Header with Title and Notification Bell */}
         {currentTab !== 'map' && (
           <header className="px-6 pt-12 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
@@ -200,12 +213,26 @@ const App: React.FC = () => {
                 {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
                 {currentTab === 'studio' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Estúdio Criativo</span>}
                 {currentTab === 'team' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Meu Elenco</span>}
+                {currentTab === 'market' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">Mercado</span>}
                 {currentTab === 'profile' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold to-yellow-600">Modo Carreira</span>}
                 {currentTab === 'rank' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-500">Classificação</span>}
               </h1>
             </div>
-            <div className="w-12 h-12 rounded-full border-2 border-neon p-0.5 shadow-neon cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
-               <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+            
+            <div className="flex items-center gap-4">
+                {/* Notification Bell */}
+                <button 
+                  onClick={() => setShowNotifications(true)}
+                  className="relative p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                >
+                    <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    {hasUnread && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black"></div>}
+                </button>
+
+                {/* Profile Pic */}
+                <div className="w-10 h-10 rounded-full border-2 border-neon p-0.5 shadow-neon cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
+                   <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+                </div>
             </div>
           </header>
         )}
@@ -214,8 +241,18 @@ const App: React.FC = () => {
           
           {currentTab === 'map' && (
              <div className="h-screen w-full absolute top-0 left-0 pt-0 md:pt-0 md:relative md:h-auto">
-                 <div className="absolute top-12 left-6 z-10 md:hidden pointer-events-none">
+                 {/* Map Header Overlay */}
+                 <div className="absolute top-12 left-6 right-6 z-10 md:hidden pointer-events-none flex justify-between items-start">
                     <h1 className="text-4xl font-display font-bold text-white drop-shadow-md tracking-wider">DOMINATION</h1>
+                    <div className="pointer-events-auto flex gap-2">
+                        <button onClick={() => setShowNotifications(true)} className="p-2 bg-black/60 backdrop-blur rounded-full border border-white/10 relative">
+                             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                             {hasUnread && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black"></div>}
+                        </button>
+                        <div className="w-10 h-10 rounded-full border-2 border-neon p-0.5 shadow-neon bg-black" onClick={() => setCurrentTab('profile')}>
+                           <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+                        </div>
+                    </div>
                  </div>
                  
                  {userRole === UserRole.OWNER && (
@@ -229,7 +266,7 @@ const App: React.FC = () => {
                     </div>
                  )}
                  {userRole === UserRole.OWNER && (
-                    <div className="absolute top-12 right-6 z-10 md:hidden">
+                    <div className="absolute top-28 right-6 z-10 md:hidden">
                         <button 
                             onClick={() => setShowMatchLogger(true)}
                             className="bg-neon text-pitch-950 w-12 h-12 rounded-full flex items-center justify-center shadow-neon font-bold text-2xl active:scale-90 transition-transform animate-pulse-slow"
@@ -247,6 +284,7 @@ const App: React.FC = () => {
             {currentTab === 'studio' && <GenAIStudio />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
+            {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} />}
           </div>
@@ -254,12 +292,20 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Pass user info to match logger for DB saving */}
+      {/* MODALS */}
       {showMatchLogger && userRole === UserRole.OWNER && (
           <MatchLogger 
             onClose={() => { setShowMatchLogger(false); refreshData(); }} 
             currentUser={activeUser}
             userTeamId={activeUser.teamId!}
+          />
+      )}
+
+      {showNotifications && (
+          <NotificationsModal 
+              currentUser={activeUser} 
+              onClose={() => setShowNotifications(false)} 
+              onRefresh={refreshData}
           />
       )}
       
