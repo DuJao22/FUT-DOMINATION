@@ -1,896 +1,415 @@
-import { Database } from '@sqlitecloud/drivers';
-import { Team, Territory, Post, User, Match, UserRole, Notification, NotificationType, Court, MatchStatus, PickupGame } from '../types';
+import { 
+  User, Team, Match, Territory, Court, PickupGame, 
+  Notification, UserRole, MatchStatus
+} from '../types';
+import { 
+  MOCK_AUTH_DB, MOCK_TEAMS, MOCK_TERRITORIES, MOCK_MATCHES 
+} from '../constants';
 
-// Fallback Hardcoded String - Updated to match user provided string exactly
-const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:8860/FUT_DOM.db?apikey=CCfQtOyo5qbyni96cUwEdIG4q2MRcEXpRHGoNpELtNc";
-
-// NOTE: Uses the connection string from vite.config.ts (process.env) or the fallback
-const connectionString = process.env.SQLITE_CONNECTION_STRING || FALLBACK_CONNECTION_STRING;
-
-// Use namespaced tables to avoid conflicts with old/broken schemas
-const TABLES = {
-    USERS: 'app_users_v2',
-    TEAMS: 'app_teams_v2',
-    MATCHES: 'app_matches_v2',
-    TERRITORIES: 'app_territories_v2',
-    NOTIFICATIONS: 'app_notifications_v2',
-    COURTS: 'app_courts_v2',
-    PICKUP_GAMES: 'app_pickup_games_v1',
-    PICKUP_ATTENDANCE: 'app_pickup_attendance_v1'
+const STORAGE_KEYS = {
+  USERS: 'fut_dom_users',
+  TEAMS: 'fut_dom_teams',
+  MATCHES: 'fut_dom_matches',
+  TERRITORIES: 'fut_dom_territories',
+  COURTS: 'fut_dom_courts',
+  PICKUP_GAMES: 'fut_dom_pickups',
+  NOTIFICATIONS: 'fut_dom_notifications'
 };
 
 class DatabaseService {
-  private db: Database | null = null;
-
-  constructor() {
-    this.initClient();
+  private delay(ms: number = 300): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private initClient() {
-    if (connectionString) {
-      try {
-        // Create a new instance.
-        this.db = new Database(connectionString);
-        console.log("🔌 Database Client Initialized.");
-      } catch (error) {
-        console.error("❌ Failed to initialize Database client constructor:", error);
-      }
-    } else {
-      console.error("❌ CRITICAL: SQLITE_CONNECTION_STRING is missing. Database will not work.");
+  private save<T>(key: string, data: T): void {
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  private load<T>(key: string, defaultValue: T): T {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  }
+
+  async initSchema(): Promise<void> {
+    await this.delay();
+    // Initialize with mock data if empty
+    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+      this.save(STORAGE_KEYS.USERS, MOCK_AUTH_DB);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.TEAMS)) {
+      this.save(STORAGE_KEYS.TEAMS, MOCK_TEAMS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.TERRITORIES)) {
+      this.save(STORAGE_KEYS.TERRITORIES, MOCK_TERRITORIES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.MATCHES)) {
+      this.save(STORAGE_KEYS.MATCHES, MOCK_MATCHES);
     }
   }
 
-  // --- INITIALIZATION ---
-  async initSchema() {
-      if (!this.db) {
-          console.error("❌ Database not initialized during initSchema call.");
-          return;
-      }
-      console.log("🏗️ Verifying Database Schema...");
-      
-      const queries = [
-          `CREATE TABLE IF NOT EXISTS ${TABLES.USERS} (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            role TEXT NOT NULL,
-            team_id TEXT,
-            avatar_url TEXT,
-            bio TEXT,
-            location TEXT,
-            onboarding_completed INTEGER DEFAULT 0,
-            position TEXT,
-            shirt_number INTEGER,
-            is_starter INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.TEAMS} (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            logo_url TEXT,
-            wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            draws INTEGER DEFAULT 0,
-            territory_color TEXT,
-            owner_id TEXT,
-            category TEXT,
-            home_turf TEXT,
-            city TEXT,
-            state TEXT,
-            neighborhood TEXT
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.COURTS} (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            address TEXT,
-            cep TEXT,
-            number TEXT,
-            phone TEXT,
-            lat REAL NOT NULL,
-            lng REAL NOT NULL,
-            registered_by_team_id TEXT,
-            is_paid INTEGER DEFAULT 0
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.MATCHES} (
-            id TEXT PRIMARY KEY,
-            date TEXT NOT NULL,
-            location_name TEXT NOT NULL,
-            court_id TEXT,
-            home_team_id TEXT NOT NULL,
-            away_team_name TEXT NOT NULL,
-            away_team_id TEXT,
-            home_score INTEGER DEFAULT 0,
-            away_score INTEGER DEFAULT 0,
-            is_verified INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'FINISHED',
-            stats_json TEXT
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.TERRITORIES} (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            owner_team_id TEXT,
-            lat REAL NOT NULL,
-            lng REAL NOT NULL,
-            points INTEGER DEFAULT 0
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.NOTIFICATIONS} (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            message TEXT NOT NULL,
-            related_id TEXT,
-            related_image TEXT,
-            is_read INTEGER DEFAULT 0,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            action_data TEXT
-          )`,
-          // PICKUP GAMES TABLES
-          `CREATE TABLE IF NOT EXISTS ${TABLES.PICKUP_GAMES} (
-            id TEXT PRIMARY KEY,
-            host_id TEXT NOT NULL,
-            host_name TEXT,
-            title TEXT NOT NULL,
-            description TEXT,
-            date TEXT NOT NULL,
-            location_name TEXT NOT NULL,
-            lat REAL NOT NULL,
-            lng REAL NOT NULL,
-            max_players INTEGER DEFAULT 14,
-            price REAL DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          )`,
-          `CREATE TABLE IF NOT EXISTS ${TABLES.PICKUP_ATTENDANCE} (
-            game_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (game_id, user_id)
-          )`,
-          // Initialize default territories
-          `INSERT OR IGNORE INTO ${TABLES.TERRITORIES} (id, name, lat, lng, points) VALUES 
-           ('area1', 'Arena Central', 40.7128, -74.0060, 500),
-           ('area2', 'Parque do Oeste', 40.7200, -74.0100, 200),
-           ('area3', 'Quadras do Norte', 40.7300, -74.0000, 350),
-           ('area4', 'Campo do Porto', 40.7050, -74.0150, 600)`
-      ];
-
-      for (const sql of queries) {
-          try {
-              // Schema init uses direct execution without params
-              await this.query(sql); 
-          } catch (e) {
-              console.log("⚠️ Schema info:", e);
-          }
-      }
-      
-      console.log("✅ Schema Verified.");
-  }
-
-  async query(sql: string, params: any[] = [], retries = 3) {
-    if (!this.db) {
-        this.initClient();
-        if (!this.db) throw new Error("Banco de dados não inicializado.");
-    }
-
-    try {
-      const safeParams = params.map(p => p === undefined ? null : p);
-      const result = await this.db.sql(sql, ...safeParams);
-      return result;
-    } catch (error: any) {
-      const errorMsg = (error?.message || String(error)).toLowerCase();
-      
-      if (retries > 0 && (
-          errorMsg.includes('disconnected') || 
-          errorMsg.includes('connection') || 
-          errorMsg.includes('connect') ||
-          errorMsg.includes('unavailable')
-      )) {
-          console.warn(`⚠️ Database connection error: ${errorMsg}. Retrying... (${retries} attempts left)`);
-          this.initClient();
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          return this.query(sql, params, retries - 1);
-      }
-
-      console.error("❌ Database Query Error:", error, "SQL:", sql);
-      throw error; 
-    }
-  }
-
-  // --- Type Mappers ---
-
-  private mapUser(row: any): User {
-    return {
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        role: row.role as UserRole,
-        teamId: row.team_id || undefined,
-        avatarUrl: row.avatar_url,
-        bio: row.bio,
-        location: row.location,
-        following: [], 
-        stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
-        badges: [],
-        onboardingCompleted: Boolean(row.onboarding_completed),
-        position: row.position,
-        shirtNumber: row.shirt_number,
-        isStarter: Boolean(row.is_starter)
-    };
-  }
-
-  private mapTeam(row: any): Team {
-    return {
-      id: row.id,
-      name: row.name,
-      logoUrl: row.logo_url,
-      wins: row.wins,
-      losses: row.losses,
-      draws: row.draws,
-      territoryColor: row.territory_color,
-      ownerId: row.owner_id,
-      category: row.category,
-      homeTurf: row.home_turf,
-      city: row.city,
-      state: row.state,
-      neighborhood: row.neighborhood,
-      players: []
-    };
-  }
-
-  private mapTerritory(row: any): Territory {
-    return {
-      id: row.id,
-      name: row.name,
-      ownerTeamId: row.owner_team_id,
-      lat: row.lat,
-      lng: row.lng,
-      points: row.points
-    };
-  }
-
-  private mapCourt(row: any): Court {
-      return {
-          id: row.id,
-          name: row.name,
-          address: row.address,
-          cep: row.cep,
-          number: row.number,
-          phone: row.phone,
-          lat: row.lat,
-          lng: row.lng,
-          registeredByTeamId: row.registered_by_team_id,
-          isPaid: Boolean(row.is_paid)
-      };
-  }
-
-  private mapNotification(row: any): Notification {
-      return {
-          id: row.id,
-          userId: row.user_id,
-          type: row.type as NotificationType,
-          title: row.title,
-          message: row.message,
-          relatedId: row.related_id,
-          relatedImage: row.related_image,
-          read: Boolean(row.is_read),
-          timestamp: new Date(row.timestamp),
-          actionData: row.action_data ? JSON.parse(row.action_data) : undefined
-      }
-  }
+  // --- GETTERS ---
   
-  private mapPickupGame(row: any, attendees: string[] = []): PickupGame {
-      return {
-          id: row.id,
-          hostId: row.host_id,
-          hostName: row.host_name,
-          title: row.title,
-          description: row.description,
-          date: new Date(row.date),
-          locationName: row.location_name,
-          lat: row.lat,
-          lng: row.lng,
-          maxPlayers: row.max_players,
-          price: row.price,
-          confirmedPlayers: attendees
-      }
+  async getTeams(): Promise<Team[]> {
+    await this.delay();
+    return this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
   }
 
-  // --- AUTH METHODS ---
+  async getMatches(): Promise<Match[]> {
+    await this.delay();
+    const matches = this.load<Match[]>(STORAGE_KEYS.MATCHES, []);
+    // Restore dates from JSON strings
+    return matches.map(m => ({ ...m, date: new Date(m.date) }));
+  }
 
-  async registerUser(user: User, passwordRaw: string): Promise<User | null> {
-    const safeEmail = user.email.trim().toLowerCase();
-    try {
-        console.log(`Attempting to register user: ${safeEmail}`);
-        await this.query(
-            `INSERT INTO ${TABLES.USERS} (id, name, email, role, avatar_url, bio, location, onboarding_completed) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
-            [user.id, user.name, safeEmail, user.role, user.avatarUrl, user.bio, user.location]
-        );
-        console.log("✅ User successfully persisted.");
-        return { ...user, email: safeEmail, onboardingCompleted: false };
-    } catch (error) {
-        console.error("🚨 Registration Fatal Error:", error);
-        throw error;
+  async getTerritories(): Promise<Territory[]> {
+    await this.delay();
+    return this.load<Territory[]>(STORAGE_KEYS.TERRITORIES, []);
+  }
+
+  async getCourts(): Promise<Court[]> {
+    await this.delay();
+    return this.load<Court[]>(STORAGE_KEYS.COURTS, []);
+  }
+
+  async getPickupGames(): Promise<PickupGame[]> {
+    await this.delay();
+    const games = this.load<PickupGame[]>(STORAGE_KEYS.PICKUP_GAMES, []);
+    return games.map(g => ({ ...g, date: new Date(g.date) }));
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    await this.delay(100);
+    const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+    return users.find(u => u.id === id);
+  }
+
+  async getUsersByIds(ids: string[]): Promise<User[]> {
+    await this.delay(100);
+    const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+    return users.filter(u => ids.includes(u.id));
+  }
+
+  async getNotifications(userId: string): Promise<Notification[]> {
+    await this.delay();
+    const all = this.load<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+    return all
+        .filter(n => n.userId === userId)
+        .map(n => ({ ...n, timestamp: new Date(n.timestamp) }))
+        .sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
+  // --- ACTIONS ---
+
+  async registerUser(user: User, password?: string): Promise<boolean> {
+    await this.delay();
+    const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+    if (users.some(u => u.email === user.email)) {
+      throw new Error("UNIQUE constraint failed: Email already exists");
     }
+    // In a real app we would hash password. Here we simulate it being stored or ignored as auth is simple.
+    users.push(user);
+    this.save(STORAGE_KEYS.USERS, users);
+    return true;
   }
 
   async loginUser(email: string): Promise<User | null> {
-      const safeEmail = email.trim().toLowerCase();
-      try {
-        const rows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE email = ? LIMIT 1`, [safeEmail]);
-        if (Array.isArray(rows) && rows.length > 0) {
-            return this.mapUser(rows[0]);
-        }
-        return null;
-      } catch (e) {
-        console.error("Login Query Error", e);
-        throw e;
-      }
+    await this.delay();
+    const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+    const user = users.find(u => u.email === email);
+    return user || null;
   }
 
-  async getUserById(id: string): Promise<User | null> {
-      try {
-        const rows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE id = ? LIMIT 1`, [id]);
-        if (Array.isArray(rows) && rows.length > 0) {
-            return this.mapUser(rows[0]);
-        }
-        return null;
-      } catch (e) {
-          return null;
-      }
+  async createCourt(court: Court): Promise<void> {
+    await this.delay();
+    const courts = this.load<Court[]>(STORAGE_KEYS.COURTS, []);
+    courts.push(court);
+    this.save(STORAGE_KEYS.COURTS, courts);
   }
 
-  async updateUserTeamAndRole(userId: string, teamId: string, role: UserRole): Promise<boolean> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.USERS} SET team_id = ?, role = ? WHERE id = ?`,
-              [teamId, role, userId]
-          );
-          return true;
-      } catch (e) {
-          console.error(e);
-          return false;
+  async createMatch(match: Match): Promise<boolean> {
+    await this.delay();
+    const matches = this.load<Match[]>(STORAGE_KEYS.MATCHES, []);
+    matches.push(match);
+    this.save(STORAGE_KEYS.MATCHES, matches);
+    
+    // Notify opponent
+    if (match.status === 'PENDING' && match.awayTeamId) {
+        const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+        const opponentTeam = teams.find(t => t.id === match.awayTeamId);
+        if (opponentTeam) {
+            this.sendNotification({
+                id: `n-${Date.now()}`,
+                userId: opponentTeam.ownerId,
+                type: 'MATCH_INVITE',
+                title: 'Desafio Recebido',
+                message: `O time mandante marcou um jogo contra você em ${match.locationName}.`,
+                read: false,
+                timestamp: new Date(),
+                actionData: { matchId: match.id, proposedDate: match.date.toISOString() }
+            });
+        }
+    }
+    return true;
+  }
+
+  async createPickupGame(game: PickupGame): Promise<boolean> {
+      await this.delay();
+      const games = this.load<PickupGame[]>(STORAGE_KEYS.PICKUP_GAMES, []);
+      games.push(game);
+      this.save(STORAGE_KEYS.PICKUP_GAMES, games);
+      return true;
+  }
+
+  async updateTeamInfo(id: string, name: string, logoUrl: string): Promise<void> {
+      await this.delay();
+      const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+      const idx = teams.findIndex(t => t.id === id);
+      if (idx !== -1) {
+          teams[idx].name = name;
+          teams[idx].logoUrl = logoUrl;
+          this.save(STORAGE_KEYS.TEAMS, teams);
       }
   }
 
   async updateUserProfile(user: User): Promise<boolean> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.USERS} SET name = ?, bio = ?, location = ?, avatar_url = ? WHERE id = ?`,
-              [user.name, user.bio, user.location, user.avatarUrl, user.id]
-          );
+      await this.delay();
+      const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+      const idx = users.findIndex(u => u.id === user.id);
+      if (idx !== -1) {
+          users[idx] = user;
+          this.save(STORAGE_KEYS.USERS, users);
           return true;
-      } catch (e) {
-          console.error("Update Profile Failed:", e);
-          return false;
       }
+      return false;
   }
 
-  async updatePlayerDetails(userId: string, data: { position: string; shirtNumber: number; isStarter: boolean; bio: string }): Promise<boolean> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.USERS} SET position = ?, shirt_number = ?, is_starter = ?, bio = ? WHERE id = ?`,
-              [data.position, data.shirtNumber || null, data.isStarter ? 1 : 0, data.bio, userId]
-          );
-          return true;
-      } catch(e) {
-          console.error("Failed to update player details", e);
-          return false;
+  async completeOnboarding(userId: string, role: UserRole, profileData: any, teamData: any): Promise<{success: boolean, user?: User}> {
+      await this.delay();
+      const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+      const userIdx = users.findIndex(u => u.id === userId);
+      
+      if (userIdx === -1) return { success: false };
+
+      const user = users[userIdx];
+      user.role = role;
+      user.name = profileData.name;
+      user.location = profileData.location;
+      user.avatarUrl = profileData.avatarUrl;
+      user.onboardingCompleted = true;
+
+      if (role === UserRole.PLAYER) {
+          user.position = profileData.position;
+          user.shirtNumber = profileData.shirtNumber;
       }
-  }
 
-  // --- ONBOARDING METHODS ---
-
-  async completeOnboarding(
-      userId: string, 
-      role: UserRole, 
-      profileData: { name: string; location: string; position?: string; shirtNumber?: number; avatarUrl?: string; },
-      teamData?: { name: string; homeTurf: string; category: string; logoUrl: string; city: string; state: string; neighborhood: string; }
-  ): Promise<{ success: boolean; user?: User; team?: Team }> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.USERS} 
-               SET name = ?, location = ?, role = ?, position = ?, shirt_number = ?, avatar_url = ?, onboarding_completed = 1 
-               WHERE id = ?`,
-              [profileData.name, profileData.location, role, profileData.position || null, profileData.shirtNumber || null, profileData.avatarUrl, userId]
-          );
-
-          let newTeam: Team | undefined;
-          if (role === UserRole.OWNER && teamData) {
-              const teamId = `t-${Date.now()}`;
-              newTeam = {
-                  id: teamId,
-                  name: teamData.name,
-                  logoUrl: teamData.logoUrl,
-                  wins: 0, losses: 0, draws: 0,
-                  territoryColor: '#39ff14',
-                  players: [],
-                  ownerId: userId,
-                  category: teamData.category as any,
-                  homeTurf: teamData.homeTurf,
-                  city: teamData.city,
-                  state: teamData.state,
-                  neighborhood: teamData.neighborhood
-              };
-
-              await this.createTeam(newTeam);
-              await this.query(`UPDATE ${TABLES.USERS} SET team_id = ? WHERE id = ?`, [teamId, userId]);
-          }
-
-          const updatedUser = await this.getUserById(userId);
-          return { success: true, user: updatedUser!, team: newTeam };
-
-      } catch (e) {
-          console.error("Onboarding Error:", e);
-          return { success: false };
-      }
-  }
-
-  // --- TEAM METHODS ---
-
-  async createTeam(team: Team): Promise<boolean> {
-      try {
-          await this.query(
-              `INSERT INTO ${TABLES.TEAMS} (id, name, logo_url, wins, losses, draws, territory_color, owner_id, category, home_turf, city, state, neighborhood)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [team.id, team.name, team.logoUrl, team.wins, team.losses, team.draws, team.territoryColor, team.ownerId, team.category, team.homeTurf, team.city, team.state, team.neighborhood]
-          );
-          return true;
-      } catch (e) {
-          console.error("Create Team failed", e);
-          return false;
-      }
-  }
-
-  async addPlayerByEmail(email: string, teamId: string): Promise<{ success: boolean, message: string, user?: User }> {
-      const safeEmail = email.trim().toLowerCase();
-      try {
-          const rows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE email = ? LIMIT 1`, [safeEmail]);
-          if (!Array.isArray(rows) || rows.length === 0) {
-              return { success: false, message: "Usuário não encontrado." };
-          }
-          const user = this.mapUser(rows[0]);
-          if (user.teamId) {
-              return { success: false, message: "Este jogador já está em outro time." };
-          }
-          await this.query(
-              `UPDATE ${TABLES.USERS} SET team_id = ?, role = 'PLAYER' WHERE id = ?`,
-              [teamId, user.id]
-          );
+      let newTeamId;
+      if (role === UserRole.OWNER && teamData) {
+          const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+          const newTeam: Team = {
+              id: `t-${Date.now()}`,
+              name: teamData.name,
+              logoUrl: teamData.logoUrl,
+              wins: 0, losses: 0, draws: 0,
+              territoryColor: '#39ff14',
+              players: [user],
+              ownerId: user.id,
+              category: teamData.category,
+              homeTurf: teamData.homeTurf,
+              city: teamData.city,
+              state: teamData.state,
+              neighborhood: teamData.neighborhood
+          };
+          teams.push(newTeam);
+          this.save(STORAGE_KEYS.TEAMS, teams);
           
-          // Send Notification to Player
-          this.createNotification(user.id, 'TEAM_INVITE', 'Você foi adicionado!', `Um time te adicionou diretamente ao elenco.`, teamId, undefined, { teamId });
-
-          return { success: true, message: "Jogador adicionado!", user: { ...user, teamId, role: UserRole.PLAYER } };
-      } catch (e) {
-          console.error("Add Player Error:", e);
-          return { success: false, message: "Erro interno." };
+          user.teamId = newTeam.id;
+          newTeamId = newTeam.id;
       }
+
+      users[userIdx] = user;
+      this.save(STORAGE_KEYS.USERS, users);
+
+      return { success: true, user };
   }
 
-  async getTeams(): Promise<Team[]> {
-    try {
-        const rows = await this.query(`SELECT * FROM ${TABLES.TEAMS}`);
-        const teams = Array.isArray(rows) ? rows.map(this.mapTeam) : [];
-        for (const team of teams) {
-            const playerRows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE team_id = ?`, [team.id]);
-            if(Array.isArray(playerRows)) {
-                team.players = playerRows.map(this.mapUser);
-            }
-        }
-        return teams;
-    } catch (e) {
-        console.error("Get Teams Error", e);
-        return [];
-    }
-  }
+  async requestTrial(userId: string, teamId: string): Promise<boolean> {
+      await this.delay();
+      const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+      const team = teams.find(t => t.id === teamId);
+      const user = await this.getUserById(userId);
 
-  // --- NOTIFICATIONS SYSTEM ---
-
-  async getNotifications(userId: string): Promise<Notification[]> {
-      try {
-          const rows = await this.query(`SELECT * FROM ${TABLES.NOTIFICATIONS} WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20`, [userId]);
-          return Array.isArray(rows) ? rows.map(this.mapNotification) : [];
-      } catch(e) {
-          console.error("Get Notifications Error", e);
-          return [];
-      }
-  }
-
-  async createNotification(
-      userId: string, 
-      type: NotificationType, 
-      title: string, 
-      message: string, 
-      relatedId?: string, 
-      relatedImage?: string,
-      actionData?: any
-  ) {
-      try {
-          const id = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          await this.query(
-              `INSERT INTO ${TABLES.NOTIFICATIONS} (id, user_id, type, title, message, related_id, related_image, action_data)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [id, userId, type, title, message, relatedId, relatedImage, actionData ? JSON.stringify(actionData) : null]
-          );
-      } catch(e) {
-          console.error("Create Notification Error", e);
-      }
-  }
-
-  async markNotificationRead(notifId: string) {
-      try {
-          await this.query(`UPDATE ${TABLES.NOTIFICATIONS} SET is_read = 1 WHERE id = ?`, [notifId]);
-      } catch(e) { console.error(e); }
-  }
-
-  async deleteNotification(notifId: string) {
-      try {
-          await this.query(`DELETE FROM ${TABLES.NOTIFICATIONS} WHERE id = ?`, [notifId]);
-      } catch(e) { console.error(e); }
-  }
-
-  // --- MARKET ACTIONS ---
-
-  async requestTrial(playerId: string, teamId: string): Promise<boolean> {
-      try {
-          // 1. Get Team Owner
-          const teams = await this.query(`SELECT owner_id, name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [teamId]);
-          if (!Array.isArray(teams) || teams.length === 0) return false;
-          const team = teams[0];
-
-          // 2. Get Player Info
-          const player = await this.getUserById(playerId);
-          if (!player) return false;
-
-          // 3. Create Notification for Owner
-          await this.createNotification(
-              team.owner_id,
-              'TRIAL_REQUEST',
-              'Pedido de Avaliação',
-              `${player.name} (${player.position || 'Livre'}) quer fazer um teste no seu time.`,
-              playerId,
-              player.avatarUrl,
-              { playerId, teamId }
-          );
-
+      if (team && user) {
+          this.sendNotification({
+              id: `n-${Date.now()}`,
+              userId: team.ownerId,
+              type: 'TRIAL_REQUEST',
+              title: 'Pedido de Teste',
+              message: `${user.name} quer entrar no seu time.`,
+              relatedId: user.id,
+              relatedImage: user.avatarUrl,
+              read: false,
+              timestamp: new Date(),
+              actionData: { teamId, playerId: userId }
+          });
           return true;
-      } catch(e) {
-          console.error("Request Trial Error", e);
-          return false;
       }
+      return false;
   }
 
   async acceptTrial(notifId: string, teamId: string, playerId: string): Promise<boolean> {
-      try {
-          // Add player to team
-          await this.query(
-              `UPDATE ${TABLES.USERS} SET team_id = ?, role = 'PLAYER' WHERE id = ?`,
-              [teamId, playerId]
-          );
+      await this.delay();
+      const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+      const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
 
-          // Mark notification as read
-          await this.markNotificationRead(notifId);
+      const userIdx = users.findIndex(u => u.id === playerId);
+      const teamIdx = teams.findIndex(t => t.id === teamId);
 
-          // Notify Player
-          const teams = await this.query(`SELECT name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [teamId]);
-          const teamName = teams[0]?.name || "O Time";
-          const teamLogo = teams[0]?.logo_url;
-
-          await this.createNotification(
-              playerId,
-              'TEAM_INVITE',
-              'Teste Aprovado! ⚽',
-              `Parabéns! ${teamName} aceitou seu pedido. Você agora faz parte do elenco.`,
-              teamId,
-              teamLogo
-          );
-
-          return true;
-      } catch(e) {
-          console.error(e);
-          return false;
-      }
-  }
-
-  // --- COURTS METHODS ---
-  async getCourts(): Promise<Court[]> {
-      try {
-          const rows = await this.query(`SELECT * FROM ${TABLES.COURTS}`);
-          return Array.isArray(rows) ? rows.map(this.mapCourt) : [];
-      } catch(e) {
-          console.error("Get Courts Failed", e);
-          return [];
-      }
-  }
-
-  async createCourt(court: Court): Promise<boolean> {
-      try {
-          await this.query(
-              `INSERT INTO ${TABLES.COURTS} (id, name, address, cep, number, phone, lat, lng, registered_by_team_id, is_paid)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [court.id, court.name, court.address, court.cep, court.number, court.phone, court.lat, court.lng, court.registeredByTeamId, court.isPaid ? 1 : 0]
-          );
-          return true;
-      } catch(e) {
-          console.error("Create Court Failed", e);
-          return false;
-      }
-  }
-
-  // --- MATCH & TERRITORY METHODS ---
-
-  async createMatch(match: Match): Promise<boolean> {
-      try {
-          await this.query(
-              `INSERT INTO ${TABLES.MATCHES} (id, date, location_name, court_id, home_team_id, away_team_name, away_team_id, home_score, away_score, is_verified, status, stats_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                  match.id, 
-                  match.date.toISOString(), 
-                  match.locationName, 
-                  match.courtId || null, 
-                  match.homeTeamId, 
-                  match.awayTeamName, 
-                  match.awayTeamId || null, 
-                  match.homeScore ?? 0, 
-                  match.awayScore ?? 0, 
-                  match.isVerified ? 1 : 0,
-                  match.status || 'FINISHED',
-                  match.goals ? JSON.stringify(match.goals) : null
-              ]
-          );
+      if (userIdx !== -1 && teamIdx !== -1) {
+          const user = users[userIdx];
+          user.teamId = teamId;
+          user.role = UserRole.PLAYER; // Assume player role in team
           
-          if (match.status === 'FINISHED') {
-              // Update stats only if finished
-              const homeS = match.homeScore ?? 0;
-              const awayS = match.awayScore ?? 0;
+          teams[teamIdx].players.push(user);
+          
+          this.save(STORAGE_KEYS.USERS, users);
+          this.save(STORAGE_KEYS.TEAMS, teams);
+          this.markNotificationRead(notifId);
+          
+          // Notify player
+          this.sendNotification({
+              id: `n-welcome-${Date.now()}`,
+              userId: playerId,
+              type: 'SYSTEM',
+              title: 'Proposta Aceita!',
+              message: `Você agora faz parte do ${teams[teamIdx].name}.`,
+              relatedId: teamId,
+              relatedImage: teams[teamIdx].logoUrl,
+              read: false,
+              timestamp: new Date()
+          });
 
-              if (homeS > awayS) {
-                  await this.query(`UPDATE ${TABLES.TEAMS} SET wins = wins + 1 WHERE id = ?`, [match.homeTeamId]);
-              } else if (homeS < awayS) {
-                  await this.query(`UPDATE ${TABLES.TEAMS} SET losses = losses + 1 WHERE id = ?`, [match.homeTeamId]);
-              } else {
-                  await this.query(`UPDATE ${TABLES.TEAMS} SET draws = draws + 1 WHERE id = ?`, [match.homeTeamId]);
-              }
-              
-              // Update Player Stats (Goals)
-              if (match.goals) {
-                 for (const goal of match.goals) {
-                    // Simple increment for MVP/Goals
-                    await this.query(`UPDATE app_users_v2 SET stats = json_set(stats, '$.goals', COALESCE(json_extract(stats, '$.goals'), 0) + 1) WHERE id = ?`, [goal.playerId]); 
-                 }
-              }
+          return true;
+      }
+      return false;
+  }
+
+  async addPlayerByEmail(email: string, teamId: string): Promise<{ success: boolean, message: string, user?: User }> {
+      await this.delay();
+      const users = this.load<User[]>(STORAGE_KEYS.USERS, []);
+      const userIdx = users.findIndex(u => u.email === email);
+      
+      if (userIdx === -1) {
+          return { success: false, message: 'Usuário não encontrado' };
+      }
+      
+      const user = users[userIdx];
+      user.teamId = teamId;
+      user.role = UserRole.PLAYER;
+      
+      const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+      const teamIdx = teams.findIndex(t => t.id === teamId);
+      if (teamIdx !== -1) {
+          if (!teams[teamIdx].players.some(p => p.id === user.id)) {
+              teams[teamIdx].players.push(user);
+              this.save(STORAGE_KEYS.TEAMS, teams);
           }
+      }
 
-          // --- NOTIFICATION LOGIC FOR INVITES ---
-          // If scheduling pending, notify opponent owner
-          if ((match.status === 'PENDING' || match.status === 'SCHEDULED') && match.awayTeamId) {
-             const teamRes = await this.query(`SELECT owner_id, name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [match.awayTeamId]);
-             const homeTeamRes = await this.query(`SELECT name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [match.homeTeamId]);
-             
-             if (Array.isArray(teamRes) && teamRes.length > 0 && Array.isArray(homeTeamRes) && homeTeamRes.length > 0) {
-                 const awayOwnerId = teamRes[0].owner_id;
-                 const homeName = homeTeamRes[0].name;
-                 const homeLogo = homeTeamRes[0].logo_url;
-                 
-                 await this.createNotification(
-                     awayOwnerId,
-                     'MATCH_INVITE',
-                     'Convite para Jogo!',
-                     `${homeName} quer jogar contra você dia ${match.date.toLocaleDateString()}.`,
-                     match.homeTeamId,
-                     homeLogo,
-                     { matchId: match.id, teamId: match.homeTeamId } // teamId here is "who invited"
-                 );
+      this.save(STORAGE_KEYS.USERS, users);
+      
+      return { success: true, message: 'Jogador adicionado', user };
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+      const notifs = this.load<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+      const idx = notifs.findIndex(n => n.id === id);
+      if (idx !== -1) {
+          notifs[idx].read = true;
+          this.save(STORAGE_KEYS.NOTIFICATIONS, notifs);
+      }
+  }
+
+  async updateMatchStatus(matchId: string, status: MatchStatus, isVerified: boolean): Promise<boolean> {
+      await this.delay();
+      const matches = this.load<Match[]>(STORAGE_KEYS.MATCHES, []);
+      const idx = matches.findIndex(m => m.id === matchId);
+      if (idx !== -1) {
+          matches[idx].status = status;
+          matches[idx].isVerified = isVerified;
+          this.save(STORAGE_KEYS.MATCHES, matches);
+          return true;
+      }
+      return false;
+  }
+
+  async updateMatchDateAndStatus(matchId: string, date: Date, status: MatchStatus, teamId: string): Promise<boolean> {
+      await this.delay();
+      const matches = this.load<Match[]>(STORAGE_KEYS.MATCHES, []);
+      const idx = matches.findIndex(m => m.id === matchId);
+      if (idx !== -1) {
+          matches[idx].date = date;
+          matches[idx].status = status;
+          this.save(STORAGE_KEYS.MATCHES, matches);
+          
+          // Notify other team
+          const match = matches[idx];
+          const otherTeamId = match.homeTeamId === teamId ? match.awayTeamId : match.homeTeamId;
+          if (otherTeamId) {
+             const teams = this.load<Team[]>(STORAGE_KEYS.TEAMS, []);
+             const otherTeam = teams.find(t => t.id === otherTeamId);
+             if (otherTeam) {
+                 this.sendNotification({
+                     id: `n-${Date.now()}`,
+                     userId: otherTeam.ownerId,
+                     type: 'MATCH_UPDATE',
+                     title: 'Contra-proposta',
+                     message: 'Nova data sugerida para o jogo.',
+                     read: false,
+                     timestamp: new Date(),
+                     actionData: { matchId: match.id, proposedDate: date.toISOString() }
+                 });
              }
           }
-
           return true;
-      } catch (e) {
-          console.error("Create Match failed", e);
-          return false;
       }
+      return false;
   }
 
-  async updateMatchStatus(matchId: string, status: MatchStatus, verified: boolean): Promise<boolean> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.MATCHES} SET status = ?, is_verified = ? WHERE id = ?`,
-              [status, verified ? 1 : 0, matchId]
-          );
-          return true;
-      } catch(e) {
-          console.error(e);
-          return false;
-      }
-  }
-
-  async updateMatchDateAndStatus(matchId: string, newDate: Date, status: MatchStatus, updatedByTeamId: string): Promise<boolean> {
-      try {
-          await this.query(
-              `UPDATE ${TABLES.MATCHES} SET date = ?, status = ? WHERE id = ?`,
-              [newDate.toISOString(), status, matchId]
-          );
-
-          // Get Match Details to find opponent
-          const matches = await this.query(`SELECT * FROM ${TABLES.MATCHES} WHERE id = ?`, [matchId]);
-          if(Array.isArray(matches) && matches.length > 0) {
-              const m = matches[0];
-              // If updatedBy is home, notify away owner. If updatedBy is away, notify home owner.
-              const targetTeamId = m.home_team_id === updatedByTeamId ? m.away_team_id : m.home_team_id;
-              const sourceTeamId = updatedByTeamId;
-
-              const targetTeamRes = await this.query(`SELECT owner_id FROM ${TABLES.TEAMS} WHERE id = ?`, [targetTeamId]);
-              const sourceTeamRes = await this.query(`SELECT name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [sourceTeamId]);
-
-              if(targetTeamRes.length > 0 && sourceTeamRes.length > 0) {
-                   await this.createNotification(
-                       targetTeamRes[0].owner_id,
-                       'MATCH_UPDATE',
-                       'Contra-proposta Recebida',
-                       `${sourceTeamRes[0].name} sugeriu uma nova data para o jogo.`,
-                       sourceTeamId,
-                       sourceTeamRes[0].logo_url,
-                       { matchId, proposedDate: newDate.toISOString() }
-                   );
+  async joinPickupGame(gameId: string, userId: string, date: Date | string): Promise<{success: boolean, message?: string}> {
+      await this.delay();
+      const games = this.load<PickupGame[]>(STORAGE_KEYS.PICKUP_GAMES, []);
+      const idx = games.findIndex(g => g.id === gameId);
+      if (idx !== -1) {
+          if (!games[idx].confirmedPlayers.includes(userId)) {
+              if (games[idx].confirmedPlayers.length >= games[idx].maxPlayers) {
+                  return { success: false, message: 'Jogo lotado' };
               }
+              games[idx].confirmedPlayers.push(userId);
+              this.save(STORAGE_KEYS.PICKUP_GAMES, games);
+              return { success: true };
           }
-
-          return true;
-      } catch(e) {
-          console.error(e);
-          return false;
       }
-  }
-
-  async getTerritories(): Promise<Territory[]> {
-    try {
-        const rows = await this.query(`SELECT * FROM ${TABLES.TERRITORIES}`);
-        return Array.isArray(rows) ? rows.map(this.mapTerritory) : [];
-    } catch (e) {
-        return [];
-    }
-  }
-  
-  async getMatches(): Promise<Match[]> {
-    try {
-        const rows = await this.query(`SELECT * FROM ${TABLES.MATCHES} ORDER BY date DESC`);
-        return Array.isArray(rows) ? rows.map((row: any) => ({
-            id: row.id,
-            date: new Date(row.date),
-            locationName: row.location_name,
-            courtId: row.court_id,
-            homeTeamId: row.home_team_id,
-            awayTeamName: row.away_team_name,
-            awayTeamId: row.away_team_id,
-            homeScore: row.home_score,
-            awayScore: row.away_score,
-            isVerified: Boolean(row.is_verified),
-            status: row.status as MatchStatus || 'FINISHED',
-            goals: row.stats_json ? JSON.parse(row.stats_json) : []
-        })) : [];
-    } catch (e) {
-        return [];
-    }
-  }
-
-  // --- PICKUP GAME (PELADAS) METHODS ---
-
-  async createPickupGame(game: PickupGame): Promise<boolean> {
-      try {
-          await this.query(
-              `INSERT INTO ${TABLES.PICKUP_GAMES} (id, host_id, host_name, title, description, date, location_name, lat, lng, max_players, price)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [game.id, game.hostId, game.hostName, game.title, game.description, game.date.toISOString(), game.locationName, game.lat, game.lng, game.maxPlayers, game.price || 0]
-          );
-          // Host automatically joins
-          await this.joinPickupGame(game.id, game.hostId, game.date);
-          return true;
-      } catch (e) {
-          console.error("Create Pickup Game Failed", e);
-          return false;
-      }
-  }
-
-  async getPickupGames(): Promise<PickupGame[]> {
-      try {
-          const gamesRows = await this.query(`SELECT * FROM ${TABLES.PICKUP_GAMES} WHERE date >= date('now') ORDER BY date ASC`);
-          const games: PickupGame[] = [];
-          
-          if(Array.isArray(gamesRows)) {
-              for(const row of gamesRows) {
-                  // Get attendance
-                  const attRows = await this.query(`SELECT user_id FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ?`, [row.id]);
-                  const attendees = Array.isArray(attRows) ? attRows.map((a:any) => a.user_id) : [];
-                  games.push(this.mapPickupGame(row, attendees));
-              }
-          }
-          return games;
-      } catch (e) {
-          console.error("Get Pickup Games Failed", e);
-          return [];
-      }
-  }
-
-  // IMPORTANT: Limit to 2 games per day
-  async joinPickupGame(gameId: string, userId: string, gameDate: Date): Promise<{success: boolean, message: string}> {
-      try {
-          // 1. Check if already joined
-          const existing = await this.query(`SELECT * FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id = ?`, [gameId, userId]);
-          if(Array.isArray(existing) && existing.length > 0) {
-              return { success: false, message: "Você já está confirmado nesta pelada." };
-          }
-
-          // 2. Check Daily Limit (Max 2)
-          // Convert JS Date to SQL formatted date string 'YYYY-MM-DD' for comparison
-          const dateStr = gameDate.toISOString().split('T')[0];
-          
-          const dailyCountRes = await this.query(
-              `SELECT count(*) as count FROM ${TABLES.PICKUP_ATTENDANCE} a
-               JOIN ${TABLES.PICKUP_GAMES} g ON a.game_id = g.id
-               WHERE a.user_id = ? AND date(g.date) = ?`,
-              [userId, dateStr]
-          );
-          
-          const dailyCount = (dailyCountRes as any[])[0]?.count || 0;
-
-          if (dailyCount >= 2) {
-              return { success: false, message: "Limite atingido! Você só pode marcar 2 peladas por dia." };
-          }
-
-          // 3. Join
-          await this.query(`INSERT INTO ${TABLES.PICKUP_ATTENDANCE} (game_id, user_id) VALUES (?, ?)`, [gameId, userId]);
-
-          // --- NOTIFICATION LOGIC START ---
-          // Notify other players
-          try {
-              // Get Game Title
-              const gameRes = await this.query(`SELECT title FROM ${TABLES.PICKUP_GAMES} WHERE id = ?`, [gameId]);
-              const gameTitle = (gameRes as any[])[0]?.title || "Pelada";
-
-              // Get User Name
-              const joiningUserRes = await this.query(`SELECT name, avatar_url FROM ${TABLES.USERS} WHERE id = ?`, [userId]);
-              const joiningUserName = (joiningUserRes as any[])[0]?.name || "Um jogador";
-              const joiningUserAvatar = (joiningUserRes as any[])[0]?.avatar_url;
-
-              // Get all OTHER attendees
-              const attendeesRes = await this.query(`SELECT user_id FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id != ?`, [gameId, userId]);
-              
-              if (Array.isArray(attendeesRes)) {
-                  for (const row of attendeesRes) {
-                      await this.createNotification(
-                          row.user_id,
-                          'PICKUP_JOIN',
-                          'Reforço Chegando! ⚽',
-                          `${joiningUserName} confirmou presença em "${gameTitle}".`,
-                          gameId,
-                          joiningUserAvatar,
-                          { gameId }
-                      );
-                  }
-              }
-          } catch (notifError) {
-              console.error("Failed to send pickup notifications", notifError);
-              // Don't fail the join action just because notification failed
-          }
-          // --- NOTIFICATION LOGIC END ---
-
-          return { success: true, message: "Presença confirmada!" };
-
-      } catch (e) {
-          console.error("Join Pickup Failed", e);
-          return { success: false, message: "Erro ao confirmar presença." };
-      }
+      return { success: false, message: 'Jogo não encontrado' };
   }
 
   async leavePickupGame(gameId: string, userId: string): Promise<boolean> {
-      try {
-          await this.query(`DELETE FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id = ?`, [gameId, userId]);
+      await this.delay();
+      const games = this.load<PickupGame[]>(STORAGE_KEYS.PICKUP_GAMES, []);
+      const idx = games.findIndex(g => g.id === gameId);
+      if (idx !== -1) {
+          games[idx].confirmedPlayers = games[idx].confirmedPlayers.filter(id => id !== userId);
+          this.save(STORAGE_KEYS.PICKUP_GAMES, games);
           return true;
-      } catch (e) {
-          return false;
       }
+      return false;
+  }
+
+  // --- INTERNAL HELPERS ---
+  
+  private async sendNotification(notif: Notification) {
+      const notifs = this.load<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+      notifs.push(notif);
+      this.save(STORAGE_KEYS.NOTIFICATIONS, notifs);
   }
 }
 

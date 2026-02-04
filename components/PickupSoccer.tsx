@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { PickupGame, User, Court } from '../types';
+import { PickupGame, User, Court, UserRole } from '../types';
 import { dbService } from '../services/database';
 
 // Reuse location controller logic simplified
@@ -54,10 +54,12 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
 
     // State for Viewing Location Modal
-    // Agora inclui o objeto Court inteiro se disponível para facilitar lógica
     const [viewingCourt, setViewingCourt] = useState<Court | null>(null);
-    // Fallback se não for uma quadra registrada (apenas um jogo ad-hoc)
     const [viewingAdHoc, setViewingAdHoc] = useState<{lat: number, lng: number, name: string} | null>(null);
+
+    // State for Viewing Player List
+    const [viewingAttendees, setViewingAttendees] = useState<User[] | null>(null);
+    const [attendeesGameTitle, setAttendeesGameTitle] = useState('');
 
     // Create Form State
     const [formStep, setFormStep] = useState(1); // 1=Location, 2=Details
@@ -102,6 +104,12 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                 alert(res.message); // Will show error if > 2 games
             }
         }
+    };
+
+    const handleViewList = async (game: PickupGame) => {
+        const users = await dbService.getUsersByIds(game.confirmedPlayers);
+        setAttendeesGameTitle(game.title);
+        setViewingAttendees(users);
     };
 
     const handleCreateGame = async () => {
@@ -282,9 +290,19 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                                                 </div>
                                                 
                                                 <div className="text-right">
-                                                    <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">
-                                                        {slotsLeft === 0 ? 'Lotado' : `${slotsLeft} Vagas Restantes`}
-                                                    </p>
+                                                    <div className="flex justify-end items-center gap-2 mb-1">
+                                                        <p className="text-[9px] text-gray-500 uppercase font-bold">
+                                                            {slotsLeft === 0 ? 'Lotado' : `${slotsLeft} Vagas`}
+                                                        </p>
+                                                        {game.confirmedPlayers.length > 0 && (
+                                                            <button 
+                                                                onClick={() => handleViewList(game)} 
+                                                                className="text-[9px] text-neon uppercase font-bold hover:underline bg-neon/10 px-1.5 py-0.5 rounded"
+                                                            >
+                                                                Ver Lista
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                     <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
                                                         <div 
                                                             className={`h-full shadow-[0_0_10px_currentColor] transition-all duration-500 ${slotsLeft === 0 ? 'bg-red-500 text-red-500' : 'bg-neon text-neon'}`} 
@@ -563,6 +581,46 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                            <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 pointer-events-none ${viewingCourt?.isPaid ? 'bg-gold' : 'bg-neon'}`}></div>
 
                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* PLAYER LIST MODAL */}
+            {viewingAttendees && (
+                <div className="fixed inset-0 bg-black/90 z-[2500] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
+                    <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[70vh]">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/50 rounded-t-2xl">
+                            <div className="truncate pr-4">
+                                <h3 className="text-white font-bold uppercase tracking-wide truncate">{attendeesGameTitle}</h3>
+                                <p className="text-[10px] text-neon uppercase font-bold tracking-wider">Lista de Presença ({viewingAttendees.length})</p>
+                            </div>
+                            <button onClick={() => setViewingAttendees(null)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/10">✕</button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                            {viewingAttendees.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4 text-sm italic">Ninguém confirmou presença ainda.</p>
+                            ) : (
+                                viewingAttendees.map(user => (
+                                    <div key={user.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5">
+                                        <img src={user.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-white font-bold text-sm">{user.name}</span>
+                                                {user.role === UserRole.OWNER && <span className="text-[8px] bg-gold text-black px-1 rounded font-bold">DONO</span>}
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 uppercase font-mono">{user.position || 'Jogador'}</p>
+                                        </div>
+                                        {user.stats?.rating && (
+                                            <div className="text-center">
+                                                <span className="block text-neon font-display text-lg font-bold leading-none">{user.stats.rating}</span>
+                                                <span className="text-[8px] text-gray-500 uppercase">OVR</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

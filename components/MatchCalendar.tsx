@@ -11,6 +11,9 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [scope, setScope] = useState<'all' | 'mine'>('all');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  
+  // State for Detail Modal Tabs
+  const [detailTab, setDetailTab] = useState<'summary' | 'lineups'>('summary');
 
   // Helper to get team logo
   const getTeamLogo = (teamId: string) => {
@@ -21,6 +24,12 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
   const getTeamName = (teamId: string) => {
     const team = teams.find(t => t.id === teamId);
     return team?.name || "Desconhecido";
+  };
+
+  const getTeamPlayers = (teamId?: string) => {
+      if(!teamId) return [];
+      const team = teams.find(t => t.id === teamId);
+      return team?.players || [];
   };
 
   const relevantMatches = matches.filter(match => {
@@ -165,7 +174,7 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
               {/* Action Button */}
               <div className="p-4 flex items-center justify-center border-t md:border-t-0 md:border-l border-white/5 bg-white/5">
                   <button 
-                      onClick={() => setSelectedMatch(match)}
+                      onClick={() => { setSelectedMatch(match); setDetailTab('summary'); }}
                       className="bg-pitch-950 hover:bg-neon hover:text-pitch-950 text-white border border-white/20 hover:border-neon px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all w-full md:w-auto"
                   >
                       Detalhes
@@ -252,7 +261,7 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
         {/* --- DETAILS MODAL --- */}
         {selectedMatch && (
             <div className="fixed inset-0 bg-black/95 z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
-                 <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative">
+                 <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative max-h-[90vh] flex flex-col">
                     {/* Background Effect */}
                     <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-pitch-900 to-pitch-950 border-b border-white/5"></div>
                     
@@ -264,7 +273,7 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                         ✕
                     </button>
 
-                    <div className="relative z-10 p-6">
+                    <div className="relative z-10 p-6 flex-1 overflow-y-auto">
                         <div className="text-center mb-6">
                             <span className="bg-black/50 text-gray-400 px-3 py-1 rounded-full text-[10px] font-bold uppercase border border-white/10">
                                 {new Date(selectedMatch.date).toLocaleDateString()} • {new Date(selectedMatch.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -300,41 +309,99 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                              </div>
                         </div>
 
-                        {/* Location Link */}
-                        <a 
-                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedMatch.locationName)}`}
-                           target="_blank"
-                           rel="noreferrer"
-                           className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-xl border border-white/10 transition-colors mb-6 group"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-pitch-900 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">📍</div>
-                                <div>
-                                    <p className="text-xs text-gray-400 font-bold uppercase">Local da Partida</p>
-                                    <p className="text-white font-bold">{selectedMatch.locationName}</p>
-                                </div>
-                            </div>
-                            <svg className="w-5 h-5 text-gray-500 group-hover:text-neon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </a>
+                        {/* Tabs */}
+                        <div className="flex bg-white/5 rounded-xl p-1 mb-6 border border-white/5">
+                            <button 
+                                onClick={() => setDetailTab('summary')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase transition-all ${detailTab === 'summary' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`}
+                            >
+                                Resumo
+                            </button>
+                            <button 
+                                onClick={() => setDetailTab('lineups')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase transition-all ${detailTab === 'lineups' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`}
+                            >
+                                Escalação (Elenco)
+                            </button>
+                        </div>
 
-                        {/* Goals List (if any) */}
-                        {selectedMatch.goals && selectedMatch.goals.length > 0 && (
-                            <div className="bg-black/30 rounded-xl p-4 border border-white/5">
-                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b border-white/5 pb-2">Gols da Partida</h4>
-                                <div className="space-y-2">
-                                    {selectedMatch.goals.map((g, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 text-sm text-white">
-                                            <span>⚽</span>
-                                            <span className="font-bold">{g.playerName}</span>
-                                            {g.minute && <span className="text-gray-500 text-xs">({g.minute}')</span>}
+                        {detailTab === 'summary' && (
+                            <div className="animate-fadeIn">
+                                {/* Location Link */}
+                                <a 
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedMatch.locationName)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-xl border border-white/10 transition-colors mb-6 group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-pitch-900 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">📍</div>
+                                        <div>
+                                            <p className="text-xs text-gray-400 font-bold uppercase">Local da Partida</p>
+                                            <p className="text-white font-bold">{selectedMatch.locationName}</p>
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                    <svg className="w-5 h-5 text-gray-500 group-hover:text-neon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                </a>
+
+                                {/* Goals List (if any) */}
+                                {selectedMatch.goals && selectedMatch.goals.length > 0 && (
+                                    <div className="bg-black/30 rounded-xl p-4 border border-white/5">
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b border-white/5 pb-2">Gols da Partida</h4>
+                                        <div className="space-y-2">
+                                            {selectedMatch.goals.map((g, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 text-sm text-white">
+                                                    <span>⚽</span>
+                                                    <span className="font-bold">{g.playerName}</span>
+                                                    {g.minute && <span className="text-gray-500 text-xs">({g.minute}')</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {selectedMatch.status === 'FINISHED' && (!selectedMatch.goals || selectedMatch.goals.length === 0) && (
+                                    <p className="text-center text-xs text-gray-600 italic">Nenhum detalhe de gols registrado.</p>
+                                )}
                             </div>
                         )}
-                        
-                        {selectedMatch.status === 'FINISHED' && (!selectedMatch.goals || selectedMatch.goals.length === 0) && (
-                            <p className="text-center text-xs text-gray-600 italic">Nenhum detalhe de gols registrado.</p>
+
+                        {detailTab === 'lineups' && (
+                            <div className="animate-fadeIn grid grid-cols-2 gap-4">
+                                {/* Home Team Roster */}
+                                <div>
+                                    <h4 className="text-[10px] text-neon uppercase font-bold mb-3 border-b border-neon/20 pb-1 text-center">Mandante</h4>
+                                    <div className="space-y-2">
+                                        {getTeamPlayers(selectedMatch.homeTeamId).map(p => (
+                                            <div key={p.id} className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg">
+                                                <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-white truncate max-w-[80px]">{p.name}</p>
+                                                    <p className="text-[8px] text-gray-500">{p.position}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {getTeamPlayers(selectedMatch.homeTeamId).length === 0 && <p className="text-[9px] text-gray-600 italic text-center">Elenco vazio</p>}
+                                    </div>
+                                </div>
+
+                                {/* Away Team Roster */}
+                                <div>
+                                    <h4 className="text-[10px] text-white uppercase font-bold mb-3 border-b border-white/20 pb-1 text-center">Visitante</h4>
+                                    <div className="space-y-2">
+                                        {getTeamPlayers(selectedMatch.awayTeamId).map(p => (
+                                            <div key={p.id} className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg">
+                                                <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-white truncate max-w-[80px]">{p.name}</p>
+                                                    <p className="text-[8px] text-gray-500">{p.position}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {getTeamPlayers(selectedMatch.awayTeamId).length === 0 && <p className="text-[9px] text-gray-600 italic text-center">Elenco vazio ou não registrado</p>}
+                                    </div>
+                                </div>
+                            </div>
                         )}
 
                     </div>
