@@ -189,11 +189,11 @@ const App: React.FC = () => {
       />
 
       {/* Main Content Area - md:ml-64 ensures space for fixed sidebar on desktop */}
-      <main className="md:ml-64 w-full min-h-screen relative pb-28 md:pb-8 transition-all duration-300">
+      <main className="md:ml-64 w-full min-h-screen relative pb-8 transition-all duration-300">
         
         {/* Header with Title and Notification Bell */}
         {currentTab !== 'map' && (
-          <header className="px-6 pt-12 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
+          <header className="px-6 pt-16 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-white uppercase italic tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
@@ -227,8 +227,8 @@ const App: React.FC = () => {
           
           {currentTab === 'map' && (
              <div className="h-screen w-full absolute top-0 left-0 pt-0 md:pt-0 md:relative md:h-auto">
-                 {/* Map Header Overlay */}
-                 <div className="absolute top-12 left-6 right-6 z-10 md:hidden pointer-events-none flex justify-between items-start">
+                 {/* Map Header Overlay - Adjusted for Mobile Sidebar Button */}
+                 <div className="absolute top-5 left-16 right-6 z-10 md:hidden pointer-events-none flex justify-between items-start">
                     <h1 className="text-4xl font-display font-bold text-white drop-shadow-md tracking-wider">DOMINATION</h1>
                     <div className="pointer-events-auto flex gap-2">
                         <button onClick={() => setShowNotifications(true)} className="p-2 bg-black/60 backdrop-blur rounded-full border border-white/10 relative">

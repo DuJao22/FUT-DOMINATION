@@ -22,9 +22,16 @@ function deg2rad(deg: number) {
     return deg * (Math.PI / 180);
 }
 
-// Component to handle map clicks for new court
-const LocationPicker = ({ onLocationSelect, initialPosition }: { onLocationSelect: (lat: number, lng: number) => void, initialPosition?: [number, number] }) => {
-    const [position, setPosition] = useState<[number, number] | null>(initialPosition || null);
+// Component to handle map clicks AND programmatic updates
+const LocationController = ({ 
+    onLocationSelect, 
+    forcedPosition 
+}: { 
+    onLocationSelect: (lat: number, lng: number) => void, 
+    forcedPosition?: {lat: number, lng: number} | null 
+}) => {
+    const [position, setPosition] = useState<[number, number] | null>(null);
+    const map = useMap();
     
     // Icon for selection
     const selectionIcon = L.divIcon({
@@ -34,6 +41,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition }: { onLocationSelec
         iconAnchor: [16, 32]
     });
 
+    // 1. Handle Map Clicks
     useMapEvents({
         click(e) {
             setPosition([e.latlng.lat, e.latlng.lng]);
@@ -41,18 +49,26 @@ const LocationPicker = ({ onLocationSelect, initialPosition }: { onLocationSelec
         },
     });
 
-    const map = useMap();
+    // 2. Handle External Updates (e.g. from CEP search)
     useEffect(() => {
-        if(initialPosition) {
-             map.flyTo(initialPosition, 16);
-             setPosition(initialPosition);
-        } else {
-            // Try to locate user initially if no position
+        if (forcedPosition) {
+            const newPos: [number, number] = [forcedPosition.lat, forcedPosition.lng];
+            setPosition(newPos);
+            map.flyTo(newPos, 16, { animate: true });
+        }
+    }, [forcedPosition, map]);
+
+    // 3. Locate user on mount if no position
+    useEffect(() => {
+        if (!forcedPosition && !position) {
              map.locate().on("locationfound", function (e) {
-                map.flyTo(e.latlng, 15);
+                // Only fly to user if we haven't selected anything yet
+                if (!position) { 
+                    map.flyTo(e.latlng, 15);
+                }
             });
         }
-    }, [map, initialPosition]);
+    }, [map]);
 
     return position ? <Marker position={position} icon={selectionIcon} /> : null;
 };
@@ -127,21 +143,43 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
   // --- HANDLERS ---
 
-  // Handle CEP auto-fill
+  // Handle CEP auto-fill AND Geocoding
   const handleCepBlur = async () => {
       const rawCep = courtForm.cep.replace(/\D/g, '');
       
       if (rawCep.length === 8) {
           setIsLoadingCep(true);
           try {
+              // 1. Get Address Data
               const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
               const data = await response.json();
               
               if (!data.erro) {
+                  const fullAddress = `${data.logradouro}, ${data.bairro}, ${data.localidade}, ${data.uf}, Brasil`;
+                  
                   setCourtForm(prev => ({
                       ...prev,
                       address: `${data.logradouro}, ${data.bairro} - ${data.localidade}/${data.uf}`,
                   }));
+
+                  // 2. Geocode to get Lat/Lng for the Map
+                  // Using OpenStreetMap Nominatim (Free, no key required for small usage)
+                  try {
+                      const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                      const geoData = await geoResponse.json();
+                      
+                      if (geoData && geoData.length > 0) {
+                          const lat = parseFloat(geoData[0].lat);
+                          const lon = parseFloat(geoData[0].lon);
+                          
+                          // Update map coordinates state -> triggers flyTo in LocationController
+                          setNewCourtCoords({ lat, lng: lon });
+                      }
+                  } catch (geoError) {
+                      console.error("Geocoding failed", geoError);
+                      // Fail silently on map, user can still click manually
+                  }
+
               } else {
                   alert("CEP não encontrado.");
               }
@@ -156,7 +194,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
   const handleRegisterCourt = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!newCourtCoords) {
-          alert("Marque a localização no mapa.");
+          alert("Por favor, confirme a localização no mapa (toque no local correto).");
           return;
       }
       
@@ -237,21 +275,22 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-pitch-900 border border-neon/50 rounded-2xl w-full max-w-lg shadow-2xl shadow-neon/10 animate-fadeIn overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-0 md:p-4">
+      {/* Changed max-h logic and flex container to fix button overlap */}
+      <div className="bg-pitch-900 border border-neon/50 rounded-none md:rounded-2xl w-full max-w-lg shadow-2xl shadow-neon/10 animate-fadeIn overflow-hidden flex flex-col h-full md:h-auto md:max-h-[90vh]">
         
         {/* Header */}
-        <div className="p-6 border-b border-pitch-800 flex justify-between items-center bg-pitch-950">
-          <h2 className="text-xl font-display font-bold text-white uppercase">
+        <div className="p-4 md:p-6 border-b border-pitch-800 flex justify-between items-center bg-pitch-950 flex-shrink-0">
+          <h2 className="text-lg md:text-xl font-display font-bold text-white uppercase">
               {step === 'select_court' && 'Onde vai ser o jogo?'}
               {step === 'register_court' && 'Cadastrar Nova Quadra'}
               {step === 'match_details' && 'Súmula da Partida'}
           </h2>
-          <button onClick={onClose} className="text-pitch-400 hover:text-white">✕</button>
+          <button onClick={onClose} className="text-pitch-400 hover:text-white bg-white/5 p-2 rounded-full">✕</button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto bg-pitch-900/50">
             
             {/* STEP 1: SELECT COURT */}
             {step === 'select_court' && (
@@ -267,7 +306,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                         </button>
                     )}
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 pb-4">
                         <p className="text-xs text-pitch-400 font-bold uppercase mb-2">Quadras Próximas</p>
                         {sortedCourts.length === 0 ? (
                             <p className="text-center text-gray-500 py-4">Nenhuma quadra encontrada.</p>
@@ -295,8 +334,8 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
             {/* STEP 2: REGISTER COURT (Owner Only) */}
             {step === 'register_court' && (
-                <div className="flex flex-col h-full">
-                     <div className="h-[250px] w-full relative flex-shrink-0">
+                <div className="flex flex-col">
+                     <div className="h-[250px] w-full relative flex-shrink-0 border-b border-pitch-800">
                          <MapContainer 
                             center={userLocation ? [userLocation.lat, userLocation.lng] : [40.7128, -74.0060]} 
                             zoom={15} 
@@ -306,17 +345,18 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                              <TileLayer
                                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                             />
-                            <LocationPicker 
-                                initialPosition={undefined}
+                            {/* Updated Controller Component */}
+                            <LocationController 
+                                forcedPosition={newCourtCoords}
                                 onLocationSelect={(lat, lng) => setNewCourtCoords({ lat, lng })} 
                             />
                          </MapContainer>
-                         <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-white px-3 py-1 rounded-full text-xs font-bold border border-neon/50 z-[1000]">
-                             Toque no mapa para marcar
+                         <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-white px-3 py-1 rounded-full text-xs font-bold border border-neon/50 z-[1000] pointer-events-none text-center w-max">
+                             {isLoadingCep ? 'Buscando local...' : 'Confirme o local no mapa'}
                          </div>
                      </div>
                      
-                     <form id="court-form" onSubmit={handleRegisterCourt} className="p-4 space-y-4">
+                     <form id="court-form" onSubmit={handleRegisterCourt} className="p-4 space-y-4 pb-8">
                         <div>
                             <label className="block text-pitch-400 text-[10px] font-bold uppercase mb-1">Nome do Local</label>
                             <input 
@@ -340,7 +380,6 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                                         value={courtForm.cep}
                                         onChange={e => {
                                             const val = e.target.value.replace(/\D/g, '');
-                                            // Format 12345-678
                                             const formatted = val.length > 5 ? `${val.slice(0,5)}-${val.slice(5,8)}` : val;
                                             setCourtForm({...courtForm, cep: formatted});
                                         }}
@@ -393,7 +432,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
             {/* STEP 3: MATCH DETAILS */}
             {step === 'match_details' && (
-                <form id="match-form" onSubmit={handleSaveMatch} className="p-6 space-y-6">
+                <form id="match-form" onSubmit={handleSaveMatch} className="p-6 space-y-6 pb-8">
                     
                     {/* Court Info Banner */}
                     <div className="bg-pitch-800/50 p-3 rounded-xl border border-white/5 flex items-center justify-between">
@@ -453,8 +492,8 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
             )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-pitch-800 bg-pitch-950">
+        {/* Footer Actions (Fixed at Bottom) */}
+        <div className="p-4 border-t border-pitch-800 bg-pitch-950 flex-shrink-0 z-10">
              {step === 'select_court' && (
                  <button onClick={onClose} className="w-full bg-transparent text-gray-500 font-bold py-3 text-sm">Cancelar</button>
              )}

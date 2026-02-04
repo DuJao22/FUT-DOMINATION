@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UserRole } from '../types';
 
 interface NavigationProps {
@@ -9,6 +9,8 @@ interface NavigationProps {
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTab, userRole, onLogout }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const navItems = [
     { id: 'map', label: 'Mapa', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
@@ -30,11 +32,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
     )},
   ];
 
-  return (
-    <>
-      {/* DESKTOP SIDEBAR (Hidden on mobile) */}
-      <nav className="hidden md:flex flex-col w-64 bg-pitch-950 border-r border-white/10 h-screen fixed left-0 top-0 p-6 z-50">
-        <div className="mb-10 px-2">
+  const MenuContent = () => (
+      <div className="flex flex-col h-full">
+         <div className="mb-10 px-2">
             <h1 className="text-4xl font-display font-bold text-white tracking-wider">
             FUT<span className="text-neon">-DOM</span>
             </h1>
@@ -45,7 +45,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
+              onClick={() => {
+                  setCurrentTab(item.id);
+                  setIsMobileMenuOpen(false);
+              }}
               className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${
                 currentTab === item.id
                   ? 'bg-white/10 border border-neon/30 shadow-[0_0_15px_rgba(57,255,20,0.1)]'
@@ -74,42 +77,43 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
             <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span className="text-sm font-bold uppercase">Sair</span>
         </button>
+      </div>
+  );
+
+  return (
+    <>
+      {/* DESKTOP SIDEBAR (md:flex) */}
+      <nav className="hidden md:flex flex-col w-64 bg-pitch-950 border-r border-white/10 h-screen fixed left-0 top-0 p-6 z-50">
+         <MenuContent />
       </nav>
 
-      {/* MOBILE DOCK (Hidden on desktop) */}
-      <nav className="md:hidden fixed bottom-5 left-4 right-4 h-20 z-[900]">
-        <div className="absolute inset-0 bg-pitch-950/90 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] flex justify-between items-center px-4 overflow-hidden">
-          
-          {/* Subtle gradient overlay */}
-          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
+      {/* MOBILE HAMBURGER BUTTON (Visible only on mobile) */}
+      <div className="md:hidden fixed top-5 left-5 z-[100] transition-opacity duration-300">
+         <button 
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="bg-black/60 backdrop-blur-md p-3 rounded-full border border-white/20 text-white shadow-lg active:scale-95 transition-all"
+         >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+         </button>
+      </div>
 
-          {navItems.map((item) => {
-            const isActive = currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentTab(item.id)}
-                className="group relative flex flex-col items-center justify-center w-12 h-full"
-              >
-                {/* Active Light Beam Background */}
-                {isActive && (
-                  <div className="absolute top-0 w-8 h-full bg-gradient-to-b from-neon/10 via-neon/5 to-transparent blur-sm rounded-full"></div>
-                )}
+      {/* MOBILE DRAWER (Overlay) */}
+      {/* Backdrop */}
+      <div 
+        className={`md:hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      ></div>
 
-                {/* Icon Container */}
-                <div className={`relative z-10 transition-transform duration-300 ${isActive ? '-translate-y-1 scale-110' : 'group-active:scale-95'}`}>
-                  {item.icon(isActive)}
-                </div>
-
-                {/* Active Indicator Dot */}
-                <div 
-                   className={`absolute bottom-4 w-1 h-1 rounded-full bg-neon shadow-[0_0_10px_#39ff14] transition-all duration-300 ${isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}
-                ></div>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Side Panel */}
+      <div className={`md:hidden fixed top-0 left-0 h-full w-3/4 max-w-xs bg-pitch-950 border-r border-white/10 p-6 z-[201] shadow-2xl transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <MenuContent />
+          <button 
+             onClick={() => setIsMobileMenuOpen(false)}
+             className="absolute top-4 right-4 text-gray-500 hover:text-white p-2"
+          >
+             ✕
+          </button>
+      </div>
     </>
   );
 };
