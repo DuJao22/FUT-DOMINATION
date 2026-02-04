@@ -163,6 +163,16 @@ class DatabaseService {
           if (Array.isArray(matchTableInfo)) {
               const existingColumns = matchTableInfo.map((col: any) => col.name);
               
+              if (!existingColumns.includes('court_id')) {
+                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN court_id TEXT`);
+                  console.log("✅ Migrated: Added 'court_id' to matches");
+              }
+              
+              if (!existingColumns.includes('away_team_id')) {
+                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN away_team_id TEXT`);
+                  console.log("✅ Migrated: Added 'away_team_id' to matches");
+              }
+
               if (!existingColumns.includes('status')) {
                   await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN status TEXT DEFAULT 'FINISHED'`);
                   console.log("✅ Migrated: Added 'status' to matches");
