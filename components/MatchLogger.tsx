@@ -112,7 +112,8 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
       address: '',
       number: '',
       cep: '',
-      phone: ''
+      phone: '',
+      isPaid: false
   });
 
   // --- INITIAL LOAD ---
@@ -256,7 +257,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
           await dbService.createCourt(newCourt);
           setCourts(prev => [...prev, newCourt]);
           setStep('select_court');
-          setCourtForm({ name: '', address: '', number: '', cep: '', phone: '' });
+          setCourtForm({ name: '', address: '', number: '', cep: '', phone: '', isPaid: false });
           setNewCourtCoords(null);
           alert("Quadra cadastrada com sucesso!");
       } catch (err) {
@@ -364,9 +365,14 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                                 className="w-full bg-white/5 border border-white/5 p-4 rounded-xl flex items-center justify-between hover:bg-white/10 text-left active:bg-white/20"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-lg bg-pitch-800 flex items-center justify-center text-xl">🏟️</div>
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${court.isPaid ? 'bg-yellow-900/30 text-gold border border-gold/30' : 'bg-pitch-800 text-neon border border-neon/30'}`}>
+                                        {court.isPaid ? '💲' : '🏟️'}
+                                    </div>
                                     <div>
-                                        <h4 className="font-bold text-white text-sm">{court.name}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-white text-sm">{court.name}</h4>
+                                            {court.isPaid && <span className="text-[9px] bg-gold text-black px-1.5 rounded font-bold uppercase">Pago</span>}
+                                        </div>
                                         <p className="text-xs text-gray-400 truncate max-w-[200px]">{court.address}</p>
                                     </div>
                                 </div>
@@ -395,6 +401,31 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                             <div><label className="text-gray-400 text-[10px] font-bold uppercase">CEP</label><input required type="text" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white" value={courtForm.cep} onChange={e => setCourtForm({...courtForm, cep: e.target.value})} onBlur={handleCepBlur} /></div>
                             <div><label className="text-gray-400 text-[10px] font-bold uppercase">Nº</label><input required type="text" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white" value={courtForm.number} onChange={e => setCourtForm({...courtForm, number: e.target.value})} /></div>
                         </div>
+                        
+                        {/* Paid/Free Toggle */}
+                        <div className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5">
+                             <div>
+                                 <label className="text-white text-sm font-bold uppercase block">Tipo de Quadra</label>
+                                 <p className="text-[10px] text-gray-400">É necessário pagar aluguel?</p>
+                             </div>
+                             <div className="flex bg-black/50 p-1 rounded-lg">
+                                 <button 
+                                    type="button" 
+                                    onClick={() => setCourtForm({...courtForm, isPaid: false})}
+                                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${!courtForm.isPaid ? 'bg-neon text-black' : 'text-gray-500 hover:text-white'}`}
+                                 >
+                                     Grátis
+                                 </button>
+                                 <button 
+                                    type="button" 
+                                    onClick={() => setCourtForm({...courtForm, isPaid: true})}
+                                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${courtForm.isPaid ? 'bg-gold text-black' : 'text-gray-500 hover:text-white'}`}
+                                 >
+                                     Paga
+                                 </button>
+                             </div>
+                        </div>
+
                         <div><label className="text-gray-400 text-[10px] font-bold uppercase">Endereço</label><input required type="text" readOnly className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white opacity-70" value={courtForm.address} /></div>
                      </form>
                 </div>
@@ -408,6 +439,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-gray-400 font-bold uppercase flex items-center gap-1">
                             📍 {selectedCourt?.name}
+                            {selectedCourt?.isPaid && <span className="bg-gold text-black px-1 rounded text-[9px]">PAGA</span>}
                         </span>
                         <button type="button" onClick={() => setStep('select_court')} className="text-neon text-[10px] font-bold uppercase underline">Alterar</button>
                     </div>
@@ -569,35 +601,34 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                     )}
                 </div>
             )}
-        </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-pitch-800 bg-pitch-950 flex gap-3 z-50">
-            {step === 'match_details' ? (
-                <>
-                    <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
-                    <button 
-                        onClick={handleSaveMatch}
-                        disabled={isSaving}
-                        className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
-                    >
-                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Finalizar Jogo')}
-                    </button>
-                </>
-            ) : (
-                <button type="submit" form="court-form" className="w-full bg-neon text-black font-bold py-4 rounded-xl shadow-neon hidden">Hidden Submit</button>
-            )}
-             {/* Dynamic Buttons for step 1 & 2 are handled inside their blocks or by this footer generically if I restructure, but keeping logic consistent with previous file for simplicity */}
-             {(step === 'register_court') && (
-                 <>
-                    <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
-                    <button type="submit" form="court-form" disabled={isSaving} className="flex-1 bg-neon text-black font-bold py-4 rounded-xl shadow-neon">Salvar Local</button>
-                 </>
-             )}
-             {step === 'select_court' && (
-                 <button onClick={onClose} className="w-full text-gray-500 py-4 font-bold">Cancelar</button>
-             )}
-        </div>
+            {/* Footer Actions */}
+            <div className="p-4 border-t border-pitch-800 bg-pitch-950 flex gap-3 z-50">
+                {step === 'match_details' ? (
+                    <>
+                        <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
+                        <button 
+                            onClick={handleSaveMatch}
+                            disabled={isSaving}
+                            className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
+                        >
+                            {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Finalizar Jogo')}
+                        </button>
+                    </>
+                ) : (
+                    <button type="submit" form="court-form" className="w-full bg-neon text-black font-bold py-4 rounded-xl shadow-neon hidden">Hidden Submit</button>
+                )}
+                 {/* Dynamic Buttons for step 1 & 2 are handled inside their blocks or by this footer generically if I restructure, but keeping logic consistent with previous file for simplicity */}
+                 {(step === 'register_court') && (
+                     <>
+                        <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
+                        <button type="submit" form="court-form" disabled={isSaving} className="flex-1 bg-neon text-black font-bold py-4 rounded-xl shadow-neon">Salvar Local</button>
+                     </>
+                 )}
+                 {step === 'select_court' && (
+                     <button onClick={onClose} className="w-full text-gray-500 py-4 font-bold">Cancelar</button>
+                 )}
+            </div>
 
       </div>
     </div>

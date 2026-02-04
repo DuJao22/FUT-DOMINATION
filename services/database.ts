@@ -88,7 +88,8 @@ class DatabaseService {
             phone TEXT,
             lat REAL NOT NULL,
             lng REAL NOT NULL,
-            registered_by_team_id TEXT
+            registered_by_team_id TEXT,
+            is_paid INTEGER DEFAULT 0
           )`,
           `CREATE TABLE IF NOT EXISTS ${TABLES.MATCHES} (
             id TEXT PRIMARY KEY,
@@ -257,7 +258,8 @@ class DatabaseService {
           phone: row.phone,
           lat: row.lat,
           lng: row.lng,
-          registeredByTeamId: row.registered_by_team_id
+          registeredByTeamId: row.registered_by_team_id,
+          isPaid: Boolean(row.is_paid)
       };
   }
 
@@ -605,9 +607,9 @@ class DatabaseService {
   async createCourt(court: Court): Promise<boolean> {
       try {
           await this.query(
-              `INSERT INTO ${TABLES.COURTS} (id, name, address, cep, number, phone, lat, lng, registered_by_team_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [court.id, court.name, court.address, court.cep, court.number, court.phone, court.lat, court.lng, court.registeredByTeamId]
+              `INSERT INTO ${TABLES.COURTS} (id, name, address, cep, number, phone, lat, lng, registered_by_team_id, is_paid)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [court.id, court.name, court.address, court.cep, court.number, court.phone, court.lat, court.lng, court.registeredByTeamId, court.isPaid ? 1 : 0]
           );
           return true;
       } catch(e) {

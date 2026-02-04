@@ -54,7 +54,10 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
     const [loading, setLoading] = useState(true);
 
     // State for Viewing Location Modal
-    const [viewingLocation, setViewingLocation] = useState<{lat: number, lng: number, name: string} | null>(null);
+    // Agora inclui o objeto Court inteiro se disponível para facilitar lógica
+    const [viewingCourt, setViewingCourt] = useState<Court | null>(null);
+    // Fallback se não for uma quadra registrada (apenas um jogo ad-hoc)
+    const [viewingAdHoc, setViewingAdHoc] = useState<{lat: number, lng: number, name: string} | null>(null);
 
     // Create Form State
     const [formStep, setFormStep] = useState(1); // 1=Location, 2=Details
@@ -139,12 +142,32 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
         // auto advance could happen here, but let user confirm on map
     };
 
-    const locationPinIcon = L.divIcon({
+    const createPinIcon = (isPaid: boolean) => L.divIcon({
         className: 'location-pin',
-        html: `<div class="w-8 h-8 text-3xl drop-shadow-md">📍</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
+        html: `<div class="relative w-14 h-14 group">
+                <div class="absolute inset-0 ${isPaid ? 'bg-gold' : 'bg-neon'} rounded-full blur-md opacity-40 group-hover:opacity-80 animate-pulse"></div>
+                <div class="relative w-12 h-12 top-1 left-1 rounded-full border-[3px] ${isPaid ? 'border-gold bg-black' : 'border-neon bg-pitch-950'} flex items-center justify-center shadow-2xl z-10 transition-transform group-hover:scale-110">
+                   <span class="text-2xl">${isPaid ? '💲' : '🏟️'}</span>
+                </div>
+               </div>`,
+        iconSize: [56, 56],
+        iconAnchor: [28, 28]
     });
+
+    // Determine upcoming games for the viewing modal
+    const getUpcomingGamesForLocation = () => {
+        if (!viewingCourt && !viewingAdHoc) return [];
+        const lat = viewingCourt ? viewingCourt.lat : viewingAdHoc!.lat;
+        const lng = viewingCourt ? viewingCourt.lng : viewingAdHoc!.lng;
+        
+        // Find games very close to this point (approx 100m)
+        return games.filter(g => {
+             const dist = Math.sqrt(Math.pow(g.lat - lat, 2) + Math.pow(g.lng - lng, 2));
+             return dist < 0.001; // Rough proximity
+        });
+    };
+
+    const upcomingGamesAtLocation = getUpcomingGamesForLocation();
 
     return (
         <div className="space-y-6 pb-24 h-full flex flex-col relative max-w-4xl mx-auto w-full">
@@ -217,7 +240,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                                                     
                                                     {/* Location Pill */}
                                                     <button 
-                                                        onClick={() => setViewingLocation({lat: game.lat, lng: game.lng, name: game.locationName})}
+                                                        onClick={() => setViewingAdHoc({lat: game.lat, lng: game.lng, name: game.locationName})}
                                                         className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-neon/50 px-3 py-1.5 rounded-lg transition-all group/loc"
                                                     >
                                                         <span className="text-neon text-lg">📍</span> 
@@ -433,33 +456,113 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                 </div>
             )}
 
-            {/* LOCATION MODAL */}
-            {viewingLocation && (
-                <div className="fixed inset-0 bg-black/90 z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
-                    <div className="bg-pitch-950 border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden flex flex-col h-[60vh] shadow-2xl relative">
-                        <div className="p-4 bg-pitch-900 border-b border-white/10 flex justify-between items-center z-10">
-                            <div>
-                                <h3 className="font-bold text-white flex items-center gap-2">📍 Localização</h3>
-                                <p className="text-xs text-gray-400">{viewingLocation.name}</p>
-                            </div>
-                            <button onClick={() => setViewingLocation(null)} className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">✕</button>
-                        </div>
-                        <div className="flex-1 relative z-0">
-                            <MapContainer center={[viewingLocation.lat, viewingLocation.lng]} zoom={15} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-                                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-                                <Marker position={[viewingLocation.lat, viewingLocation.lng]} icon={locationPinIcon} />
-                            </MapContainer>
-                        </div>
-                        <div className="p-4 bg-pitch-900 border-t border-white/10 z-10">
-                            <a 
-                                href={`https://www.google.com/maps/search/?api=1&query=${viewingLocation.lat},${viewingLocation.lng}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="block w-full bg-neon text-black font-bold text-center py-4 rounded-xl uppercase tracking-widest shadow-neon hover:scale-[1.02] transition-transform flex items-center justify-center gap-2"
-                            >
-                                <span>🗺️</span> Abrir no Google Maps
-                            </a>
-                        </div>
+            {/* LOCATION VIEW MODAL (PREMIUM BOTTOM SHEET) */}
+            {(viewingCourt || viewingAdHoc) && (
+                <div className="fixed inset-0 bg-black z-[2000] animate-[fadeIn_0.2s_ease-out]">
+                    
+                    {/* Full Screen Map */}
+                    <div className="absolute inset-0 z-0">
+                         <MapContainer 
+                            center={[viewingCourt ? viewingCourt.lat : viewingAdHoc!.lat, viewingCourt ? viewingCourt.lng : viewingAdHoc!.lng]} 
+                            zoom={16} 
+                            style={{ height: "100%", width: "100%" }} 
+                            zoomControl={false}
+                         >
+                            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                            <Marker 
+                                position={[viewingCourt ? viewingCourt.lat : viewingAdHoc!.lat, viewingCourt ? viewingCourt.lng : viewingAdHoc!.lng]} 
+                                icon={createPinIcon(viewingCourt?.isPaid || false)} 
+                            />
+                        </MapContainer>
+                    </div>
+
+                    {/* Back Button */}
+                    <button 
+                        onClick={() => { setViewingCourt(null); setViewingAdHoc(null); }}
+                        className="absolute top-4 left-4 z-10 w-10 h-10 flex items-center justify-center bg-black/50 rounded-full text-white hover:bg-white/20 backdrop-blur-md"
+                    >
+                        ✕
+                    </button>
+
+                    {/* Bottom Sheet Card */}
+                    <div className="absolute bottom-4 left-2 right-2 md:bottom-6 md:left-6 md:right-auto md:w-96 z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] max-h-[70vh] flex flex-col">
+                       <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5 flex flex-col">
+                           
+                           <div className="flex items-center gap-4 mb-5 relative z-10 pr-8">
+                               {/* Logo with status ring */}
+                               <div className="relative">
+                                    <div className={`w-16 h-16 rounded-2xl bg-black border-2 ${viewingCourt?.isPaid ? 'border-gold shadow-gold/20' : 'border-neon shadow-neon/20'} p-1 shadow-lg flex items-center justify-center`}>
+                                        <span className="text-3xl">{viewingCourt?.isPaid ? '💲' : '🏟️'}</span>
+                                    </div>
+                               </div>
+
+                               <div>
+                                   <h3 className="text-xl font-display font-bold text-white uppercase leading-tight mb-1">{viewingCourt ? viewingCourt.name : viewingAdHoc?.name}</h3>
+                                   <div className="flex gap-2">
+                                       <span className="text-xs text-gray-400 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded">
+                                           Quadra Esportiva
+                                       </span>
+                                       {viewingCourt?.isPaid && (
+                                           <span className="text-xs text-black bg-gold font-bold uppercase tracking-widest px-2 py-0.5 rounded">
+                                               Paga
+                                           </span>
+                                       )}
+                                       {viewingCourt && !viewingCourt.isPaid && (
+                                           <span className="text-xs text-black bg-neon font-bold uppercase tracking-widest px-2 py-0.5 rounded">
+                                               Grátis
+                                           </span>
+                                       )}
+                                   </div>
+                               </div>
+                           </div>
+
+                           <a 
+                               href={`https://www.google.com/maps/search/?api=1&query=${viewingCourt ? viewingCourt.lat : viewingAdHoc!.lat},${viewingCourt ? viewingCourt.lng : viewingAdHoc!.lng}`}
+                               target="_blank"
+                               rel="noreferrer"
+                               className={`block w-full text-center font-bold py-3.5 rounded-xl uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all relative z-10 mb-4 ${viewingCourt?.isPaid ? 'bg-gold text-black shadow-gold/20' : 'bg-neon text-black shadow-neon/20'}`}
+                           >
+                              🗺️ Navegar (GPS)
+                           </a>
+
+                           {/* UPCOMING GAMES LIST */}
+                           <div className="border-t border-white/10 pt-4 relative z-10 overflow-y-auto max-h-48">
+                               <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 sticky top-0 bg-pitch-950/95 py-1 z-20">Próximos Jogos Aqui</h4>
+                               {upcomingGamesAtLocation.length === 0 ? (
+                                   <p className="text-sm text-gray-400 italic">Nenhuma pelada marcada para os próximos dias.</p>
+                               ) : (
+                                   <div className="space-y-2">
+                                       {upcomingGamesAtLocation.map(g => (
+                                           <div key={g.id} className="bg-white/5 p-3 rounded-xl border border-white/5 flex justify-between items-center">
+                                               <div>
+                                                   <p className="text-sm font-bold text-white">{g.title}</p>
+                                                   <p className="text-[10px] text-gray-400">
+                                                       {new Date(g.date).toLocaleDateString()} às {new Date(g.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                   </p>
+                                               </div>
+                                               <button 
+                                                    onClick={() => {
+                                                        handleJoin(g);
+                                                        // Close location modal or just refresh logic handled by join
+                                                    }}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded uppercase ${
+                                                        g.confirmedPlayers.includes(currentUser.id) 
+                                                        ? 'bg-red-900/40 text-red-400 border border-red-500/20' 
+                                                        : 'bg-neon/10 text-neon border border-neon/20'
+                                                    }`}
+                                               >
+                                                   {g.confirmedPlayers.includes(currentUser.id) ? 'Sair' : 'Jogar'}
+                                               </button>
+                                           </div>
+                                       ))}
+                                   </div>
+                               )}
+                           </div>
+
+                           {/* Decorative Gradient */}
+                           <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 pointer-events-none ${viewingCourt?.isPaid ? 'bg-gold' : 'bg-neon'}`}></div>
+
+                       </div>
                     </div>
                 </div>
             )}

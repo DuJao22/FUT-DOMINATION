@@ -1,5 +1,3 @@
-
-
 export enum UserRole {
   OWNER = 'OWNER',
   PLAYER = 'PLAYER', // Usually assigned by Owner
@@ -80,6 +78,7 @@ export interface Court {
   lat: number;
   lng: number;
   registeredByTeamId: string;
+  isPaid: boolean; // NEW: Distinguish Paid vs Free courts
 }
 
 export type MatchStatus = 'SCHEDULED' | 'FINISHED' | 'PENDING' | 'CANCELLED';
@@ -172,5 +171,6 @@ export interface Notification {
       playerId?: string;
       matchId?: string;
       proposedDate?: string;
+      gameId?: string;
   };
 }
