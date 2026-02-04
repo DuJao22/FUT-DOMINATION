@@ -17,8 +17,16 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, onCompl
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [coords, setCoords] = useState<{ top: number, left: number, width: number, height: number } | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
     const currentStep = steps[currentStepIndex];
+
+    // Detectar resize para atualizar isMobile
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Calcula a posição do elemento alvo
     useLayoutEffect(() => {
@@ -42,22 +50,23 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, onCompl
                     height: rect.height
                 });
                 setIsVisible(true);
-                // Scroll suave até o elemento se necessário
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Scroll suave até o elemento se necessário, com margem
+                element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
             } else {
-                // Se o elemento não existe na tela atual (ex: menu fechado), pula ou centraliza
-                // Por segurança, vamos centralizar temporariamente se não achar
+                // Se o elemento não existe na tela atual
                 setCoords(null); 
                 setIsVisible(true);
             }
         };
 
-        // Pequeno delay para garantir que o DOM renderizou
         const timer = setTimeout(updatePosition, 300);
         window.addEventListener('resize', updatePosition);
+        // Também atualizar ao rolar
+        window.addEventListener('scroll', updatePosition);
 
         return () => {
             window.removeEventListener('resize', updatePosition);
+            window.removeEventListener('scroll', updatePosition);
             clearTimeout(timer);
         };
     }, [currentStepIndex, currentStep]);
@@ -80,21 +89,40 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, onCompl
 
     // Cálculos de estilo para o balão
     const getPopoverStyle = () => {
-        if (!coords || currentStep.position === 'center') {
+        // MOBILE STRATEGY: Sempre fixo embaixo (Bottom Sheet style) se não for 'center'
+        if (isMobile && currentStep.position !== 'center') {
             return {
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                maxWidth: '90vw'
+                position: 'fixed',
+                bottom: '24px',
+                left: '16px',
+                right: '16px',
+                width: 'auto',
+                margin: '0 auto',
+                maxWidth: '400px',
+                transform: 'none', // Remove transformações de centralização
+                zIndex: 10000
             };
         }
 
-        const gap = 15; // Espaço entre elemento e balão
+        // DESKTOP OU CENTER STRATEGY
+        if (!coords || currentStep.position === 'center') {
+            return {
+                position: 'fixed', // Center usa fixed para garantir meio da tela
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                maxWidth: '90vw',
+                width: '400px',
+                zIndex: 10000
+            };
+        }
+
+        const gap = 15;
         let top = 0;
         let left = 0;
         let transform = '';
 
-        // Lógica simples de posicionamento (pode ser melhorada com bibliotecas como floating-ui)
+        // Lógica Desktop (posiciona ao lado do elemento)
         switch (currentStep.position) {
             case 'bottom':
                 top = coords.top + coords.height + gap;
@@ -116,52 +144,72 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, onCompl
                 left = coords.left + coords.width + gap;
                 transform = 'translate(0, -50%)';
                 break;
-            default: // Fallback to bottom
+            default:
                 top = coords.top + coords.height + gap;
                 left = coords.left + (coords.width / 2);
                 transform = 'translateX(-50%)';
         }
 
-        // Ajustes de borda para mobile (evitar sair da tela)
+        // Boundary Checks básicos para Desktop
         const screenW = window.innerWidth;
-        if (left < 20) { left = 20; transform = currentStep.position === 'top' || currentStep.position === 'bottom' ? 'translateX(0)' : transform; }
-        if (left > screenW - 20) { left = screenW - 20; transform = currentStep.position === 'top' || currentStep.position === 'bottom' ? 'translateX(-100%)' : transform; }
+        // Evita sair na esquerda
+        if (left < 150) { 
+            left = coords.left; 
+            transform = transform.replace('translateX(-50%)', 'translateX(0)'); 
+        }
+        // Evita sair na direita
+        if (left > screenW - 150) { 
+            left = coords.left + coords.width; 
+            transform = transform.replace('translateX(-50%)', 'translateX(-100%)'); 
+        }
 
-        return { top, left, transform, maxWidth: '300px' };
+        return { 
+            position: 'absolute', // Desktop usa absolute baseado no scroll
+            top, 
+            left, 
+            transform, 
+            maxWidth: '320px',
+            zIndex: 10000
+        };
     };
 
     if (!currentStep) return null;
 
+    const popoverStyle = getPopoverStyle() as React.CSSProperties;
+
     return (
         <div className="fixed inset-0 z-[9999] pointer-events-auto animate-[fadeIn_0.3s_ease-out]">
-            {/* Backdrop Escuro com "Buraco" (Spotlight) simulado via SVG ou Mix-blend (Simplificado aqui com overlay total) */}
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-500"></div>
+            {/* Backdrop Escuro */}
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-500"></div>
 
-            {/* Destaque no elemento (Spotlight Ring) */}
+            {/* Destaque no elemento (Spotlight Ring) - Absoluto na página */}
             {coords && (
                 <div 
-                    className="absolute border-2 border-neon rounded-xl shadow-[0_0_30px_rgba(57,255,20,0.6)] animate-pulse transition-all duration-300 ease-in-out"
+                    className="absolute border-2 border-neon rounded-xl shadow-[0_0_30px_rgba(57,255,20,0.6)] animate-pulse transition-all duration-300 ease-in-out z-[9999]"
                     style={{
                         top: coords.top - 4,
                         left: coords.left - 4,
                         width: coords.width + 8,
                         height: coords.height + 8,
                     }}
-                ></div>
+                >
+                    {/* Linha conectora no mobile (opcional visual cue) */}
+                    {isMobile && currentStep.position !== 'center' && (
+                        <div className="absolute left-1/2 top-full h-[100vh] w-0.5 border-l border-dashed border-neon/30 -translate-x-1/2"></div>
+                    )}
+                </div>
             )}
 
             {/* O Balão (Popover) */}
             <div 
-                className={`absolute bg-pitch-900 border border-neon/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 ease-in-out ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-                style={getPopoverStyle() as React.CSSProperties}
+                className={`bg-pitch-900 border border-neon/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 ease-in-out ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
+                style={popoverStyle}
             >
-                {/* Arrow indicator logic omitted for simplicity, relying on position */}
-                
                 <div className="flex justify-between items-start">
                     <h3 className="text-xl font-display font-bold text-white uppercase tracking-wide">
                         {currentStep.title} <span className="text-neon">.</span>
                     </h3>
-                    <button onClick={onSkip} className="text-[10px] text-gray-500 hover:text-white uppercase font-bold">Pular</button>
+                    <button onClick={onSkip} className="text-[10px] text-gray-500 hover:text-white uppercase font-bold p-1">Pular</button>
                 </div>
 
                 <p className="text-sm text-gray-300 leading-relaxed">
@@ -177,14 +225,14 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, onCompl
                         {currentStepIndex > 0 && (
                             <button 
                                 onClick={handlePrev}
-                                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-gray-300 transition-colors"
+                                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-gray-300 transition-colors"
                             >
                                 Voltar
                             </button>
                         )}
                         <button 
                             onClick={handleNext}
-                            className="px-4 py-1.5 rounded-lg bg-neon text-black text-xs font-bold hover:bg-white transition-colors shadow-neon"
+                            className="px-6 py-2 rounded-lg bg-neon text-black text-xs font-bold hover:bg-white transition-colors shadow-neon"
                         >
                             {currentStepIndex === steps.length - 1 ? 'Concluir 🚀' : 'Próximo →'}
                         </button>
