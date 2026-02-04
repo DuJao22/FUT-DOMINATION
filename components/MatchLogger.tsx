@@ -44,8 +44,9 @@ const LocationController = ({
     // 1. Handle Map Clicks
     useMapEvents({
         click(e) {
-            setPosition([e.latlng.lat, e.latlng.lng]);
-            onLocationSelect(e.latlng.lat, e.latlng.lng);
+            const { lat, lng } = e.latlng;
+            setPosition([lat, lng]);
+            onLocationSelect(lat, lng);
         },
     });
 
@@ -143,14 +144,49 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
   // --- HANDLERS ---
 
-  // Handle CEP auto-fill AND Geocoding
+  // 1. Map Click Handler (Reverse Geocoding)
+  const handleMapClick = async (lat: number, lng: number) => {
+      setNewCourtCoords({ lat, lng });
+      setIsLoadingCep(true);
+
+      try {
+          // Fetch address from coordinates
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const data = await response.json();
+
+          if (data && data.address) {
+              const addr = data.address;
+              
+              // Construct Address String
+              const street = addr.road || addr.pedestrian || '';
+              const district = addr.suburb || addr.neighbourhood || addr.city_district || '';
+              const city = addr.city || addr.town || addr.village || '';
+              const state = addr.state_district || addr.state || '';
+              
+              const fullAddress = `${street}${district ? `, ${district}` : ''} - ${city}/${state}`;
+
+              setCourtForm(prev => ({
+                  ...prev,
+                  cep: addr.postcode || prev.cep, // Update CEP if found
+                  address: fullAddress,
+                  number: addr.house_number || '' // Update number if found
+              }));
+          }
+      } catch (error) {
+          console.error("Reverse geocoding failed", error);
+      } finally {
+          setIsLoadingCep(false);
+      }
+  };
+
+  // 2. CEP Blur Handler (Forward Geocoding)
   const handleCepBlur = async () => {
       const rawCep = courtForm.cep.replace(/\D/g, '');
       
       if (rawCep.length === 8) {
           setIsLoadingCep(true);
           try {
-              // 1. Get Address Data
+              // Get Address Data from ViaCEP
               const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
               const data = await response.json();
               
@@ -162,8 +198,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                       address: `${data.logradouro}, ${data.bairro} - ${data.localidade}/${data.uf}`,
                   }));
 
-                  // 2. Geocode to get Lat/Lng for the Map
-                  // Using OpenStreetMap Nominatim (Free, no key required for small usage)
+                  // Geocode to get Lat/Lng for the Map
                   try {
                       const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
                       const geoData = await geoResponse.json();
@@ -177,7 +212,6 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                       }
                   } catch (geoError) {
                       console.error("Geocoding failed", geoError);
-                      // Fail silently on map, user can still click manually
                   }
 
               } else {
@@ -345,14 +379,14 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                              <TileLayer
                                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                             />
-                            {/* Updated Controller Component */}
+                            {/* Controller passes click events back to parent */}
                             <LocationController 
                                 forcedPosition={newCourtCoords}
-                                onLocationSelect={(lat, lng) => setNewCourtCoords({ lat, lng })} 
+                                onLocationSelect={handleMapClick} 
                             />
                          </MapContainer>
                          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-white px-3 py-1 rounded-full text-xs font-bold border border-neon/50 z-[1000] pointer-events-none text-center w-max">
-                             {isLoadingCep ? 'Buscando local...' : 'Confirme o local no mapa'}
+                             {isLoadingCep ? 'Buscando endereço...' : 'Toque no mapa para preencher endereço'}
                          </div>
                      </div>
                      
