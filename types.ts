@@ -81,7 +81,7 @@ export interface Court {
   registeredByTeamId: string;
 }
 
-export type MatchStatus = 'SCHEDULED' | 'FINISHED' | 'PENDING';
+export type MatchStatus = 'SCHEDULED' | 'FINISHED' | 'PENDING' | 'CANCELLED';
 
 export interface MatchGoal {
     playerId: string;
@@ -139,7 +139,7 @@ export interface Post {
 export type ImageResolution = '1K' | '2K' | '4K';
 
 // --- NEW NOTIFICATION TYPES ---
-export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM';
+export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE';
 
 export interface Notification {
   id: string;
@@ -154,5 +154,7 @@ export interface Notification {
   actionData?: {
       teamId?: string;
       playerId?: string;
+      matchId?: string;
+      proposedDate?: string;
   };
 }

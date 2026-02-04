@@ -11,6 +11,10 @@ interface NotificationsModalProps {
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({ currentUser, onClose, onRefresh }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Counter Proposal State
+    const [counterPropId, setCounterPropId] = useState<string | null>(null);
+    const [newDate, setNewDate] = useState('');
 
     useEffect(() => {
         loadNotifications();
@@ -38,6 +42,47 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ currentU
     const handleMarkRead = async (id: string) => {
         await dbService.markNotificationRead(id);
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    };
+
+    // --- MATCH NEGOTIATION HANDLERS ---
+    
+    const handleAcceptMatch = async (notif: Notification) => {
+        if(!notif.actionData?.matchId) return;
+        const success = await dbService.updateMatchStatus(notif.actionData.matchId, 'SCHEDULED', true);
+        if(success) {
+            await handleMarkRead(notif.id);
+            alert("Jogo confirmado!");
+            onRefresh();
+        }
+    };
+
+    const handleDeclineMatch = async (notif: Notification) => {
+        if(!notif.actionData?.matchId) return;
+        const success = await dbService.updateMatchStatus(notif.actionData.matchId, 'CANCELLED', false);
+        if(success) {
+            await handleMarkRead(notif.id);
+            alert("Jogo recusado/cancelado.");
+            onRefresh();
+        }
+    };
+
+    const submitCounterProposal = async (notif: Notification) => {
+        if(!notif.actionData?.matchId || !newDate) return;
+        if(!currentUser.teamId) return;
+
+        const success = await dbService.updateMatchDateAndStatus(
+            notif.actionData.matchId, 
+            new Date(newDate), 
+            'PENDING', 
+            currentUser.teamId
+        );
+
+        if(success) {
+            await handleMarkRead(notif.id);
+            setCounterPropId(null);
+            alert("Contra-proposta enviada!");
+            onRefresh();
+        }
     };
 
     return (
@@ -94,8 +139,56 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ currentU
                                                 </button>
                                             </div>
                                         )}
+
+                                        {/* Actions for Match Invites / Updates */}
+                                        {(n.type === 'MATCH_INVITE' || n.type === 'MATCH_UPDATE') && !n.read && (
+                                            <div className="mt-3 space-y-2">
+                                                {n.actionData?.proposedDate && (
+                                                    <div className="text-xs bg-white/5 p-2 rounded border border-neon/20 mb-2">
+                                                        Data Proposta: <span className="font-bold text-neon">{new Date(n.actionData.proposedDate).toLocaleString()}</span>
+                                                    </div>
+                                                )}
+
+                                                {counterPropId === n.id ? (
+                                                    <div className="bg-black/40 p-2 rounded-lg border border-white/10">
+                                                        <label className="text-[10px] text-gray-400 font-bold mb-1 block">Sugerir Nova Data:</label>
+                                                        <input 
+                                                            type="datetime-local" 
+                                                            className="w-full bg-pitch-900 border border-white/20 rounded p-1 text-white text-xs mb-2"
+                                                            value={newDate}
+                                                            onChange={e => setNewDate(e.target.value)}
+                                                        />
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => setCounterPropId(null)} className="flex-1 bg-gray-700 text-xs py-1 rounded">Cancelar</button>
+                                                            <button onClick={() => submitCounterProposal(n)} className="flex-1 bg-neon text-black text-xs font-bold py-1 rounded">Enviar</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => handleAcceptMatch(n)}
+                                                            className="flex-1 bg-green-500 text-black text-xs font-bold py-2 rounded hover:bg-green-400"
+                                                        >
+                                                            Aceitar
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setCounterPropId(n.id)}
+                                                            className="flex-1 bg-blue-600 text-white text-xs font-bold py-2 rounded hover:bg-blue-500"
+                                                        >
+                                                            Contra-proposta
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeclineMatch(n)}
+                                                            className="flex-1 bg-red-900/50 text-red-300 text-xs font-bold py-2 rounded hover:bg-red-900"
+                                                        >
+                                                            Recusar
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         
-                                        {!n.read && n.type !== 'TRIAL_REQUEST' && (
+                                        {!n.read && n.type !== 'TRIAL_REQUEST' && n.type !== 'MATCH_INVITE' && n.type !== 'MATCH_UPDATE' && (
                                             <button 
                                                 onClick={() => handleMarkRead(n.id)}
                                                 className="text-[10px] text-neon mt-2 font-bold hover:underline"

@@ -59,6 +59,7 @@ class DatabaseService {
             onboarding_completed INTEGER DEFAULT 0,
             position TEXT,
             shirt_number INTEGER,
+            is_starter INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           )`,
           `CREATE TABLE IF NOT EXISTS ${TABLES.TEAMS} (
@@ -157,6 +158,16 @@ class DatabaseService {
                   console.log("✅ Migrated: Added 'neighborhood' to teams");
               }
           }
+          
+          // User Migrations
+          const userInfo = await this.query(`PRAGMA table_info(${TABLES.USERS})`);
+          if (Array.isArray(userInfo)) {
+              const existingColumns = userInfo.map((col: any) => col.name);
+              if (!existingColumns.includes('is_starter')) {
+                  await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN is_starter INTEGER DEFAULT 0`);
+                  console.log("✅ Migrated: Added 'is_starter' to users");
+              }
+          }
 
           // Match Migrations
           const matchTableInfo = await this.query(`PRAGMA table_info(${TABLES.MATCHES})`);
@@ -237,7 +248,8 @@ class DatabaseService {
         badges: [],
         onboardingCompleted: Boolean(row.onboarding_completed),
         position: row.position,
-        shirtNumber: row.shirt_number
+        shirtNumber: row.shirt_number,
+        isStarter: Boolean(row.is_starter)
     };
   }
 
@@ -367,6 +379,19 @@ class DatabaseService {
           return true;
       } catch (e) {
           console.error("Update Profile Failed:", e);
+          return false;
+      }
+  }
+
+  async updatePlayerDetails(userId: string, data: { position: string; shirtNumber: number; isStarter: boolean; bio: string }): Promise<boolean> {
+      try {
+          await this.query(
+              `UPDATE ${TABLES.USERS} SET position = ?, shirt_number = ?, is_starter = ?, bio = ? WHERE id = ?`,
+              [data.position, data.shirtNumber || null, data.isStarter ? 1 : 0, data.bio, userId]
+          );
+          return true;
+      } catch(e) {
+          console.error("Failed to update player details", e);
           return false;
       }
   }
@@ -651,15 +676,87 @@ class DatabaseService {
                  for (const goal of match.goals) {
                     // Simple increment for MVP/Goals
                     await this.query(`UPDATE app_users_v2 SET stats = json_set(stats, '$.goals', COALESCE(json_extract(stats, '$.goals'), 0) + 1) WHERE id = ?`, [goal.playerId]); 
-                    // Note: SQLCloud might handle JSON differently, this is a conceptual example. 
-                    // Robust way: Fetch user, update JS object, save back.
                  }
               }
+          }
+
+          // --- NOTIFICATION LOGIC FOR INVITES ---
+          // If scheduling pending, notify opponent owner
+          if ((match.status === 'PENDING' || match.status === 'SCHEDULED') && match.awayTeamId) {
+             const teamRes = await this.query(`SELECT owner_id, name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [match.awayTeamId]);
+             const homeTeamRes = await this.query(`SELECT name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [match.homeTeamId]);
+             
+             if (Array.isArray(teamRes) && teamRes.length > 0 && Array.isArray(homeTeamRes) && homeTeamRes.length > 0) {
+                 const awayOwnerId = teamRes[0].owner_id;
+                 const homeName = homeTeamRes[0].name;
+                 const homeLogo = homeTeamRes[0].logo_url;
+                 
+                 await this.createNotification(
+                     awayOwnerId,
+                     'MATCH_INVITE',
+                     'Convite para Jogo!',
+                     `${homeName} quer jogar contra você dia ${match.date.toLocaleDateString()}.`,
+                     match.homeTeamId,
+                     homeLogo,
+                     { matchId: match.id, teamId: match.homeTeamId } // teamId here is "who invited"
+                 );
+             }
           }
 
           return true;
       } catch (e) {
           console.error("Create Match failed", e);
+          return false;
+      }
+  }
+
+  async updateMatchStatus(matchId: string, status: MatchStatus, verified: boolean): Promise<boolean> {
+      try {
+          await this.query(
+              `UPDATE ${TABLES.MATCHES} SET status = ?, is_verified = ? WHERE id = ?`,
+              [status, verified ? 1 : 0, matchId]
+          );
+          return true;
+      } catch(e) {
+          console.error(e);
+          return false;
+      }
+  }
+
+  async updateMatchDateAndStatus(matchId: string, newDate: Date, status: MatchStatus, updatedByTeamId: string): Promise<boolean> {
+      try {
+          await this.query(
+              `UPDATE ${TABLES.MATCHES} SET date = ?, status = ? WHERE id = ?`,
+              [newDate.toISOString(), status, matchId]
+          );
+
+          // Get Match Details to find opponent
+          const matches = await this.query(`SELECT * FROM ${TABLES.MATCHES} WHERE id = ?`, [matchId]);
+          if(Array.isArray(matches) && matches.length > 0) {
+              const m = matches[0];
+              // If updatedBy is home, notify away owner. If updatedBy is away, notify home owner.
+              const targetTeamId = m.home_team_id === updatedByTeamId ? m.away_team_id : m.home_team_id;
+              const sourceTeamId = updatedByTeamId;
+
+              const targetTeamRes = await this.query(`SELECT owner_id FROM ${TABLES.TEAMS} WHERE id = ?`, [targetTeamId]);
+              const sourceTeamRes = await this.query(`SELECT name, logo_url FROM ${TABLES.TEAMS} WHERE id = ?`, [sourceTeamId]);
+
+              if(targetTeamRes.length > 0 && sourceTeamRes.length > 0) {
+                   await this.createNotification(
+                       targetTeamRes[0].owner_id,
+                       'MATCH_UPDATE',
+                       'Contra-proposta Recebida',
+                       `${sourceTeamRes[0].name} sugeriu uma nova data para o jogo.`,
+                       sourceTeamId,
+                       sourceTeamRes[0].logo_url,
+                       { matchId, proposedDate: newDate.toISOString() }
+                   );
+              }
+          }
+
+          return true;
+      } catch(e) {
+          console.error(e);
           return false;
       }
   }

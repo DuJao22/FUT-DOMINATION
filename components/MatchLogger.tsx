@@ -273,7 +273,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
         const opponentTeam = teams.find(t => t.id === selectedOpponentId);
         
         const finalDate = matchMode === 'schedule' ? new Date(scheduleDate) : new Date();
-        const status: MatchStatus = matchMode === 'schedule' ? 'SCHEDULED' : 'FINISHED';
+        const status: MatchStatus = matchMode === 'schedule' ? 'PENDING' : 'FINISHED';
 
         const newMatch: Match = {
             id: `m-${Date.now()}`,
@@ -293,7 +293,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
         const success = await dbService.createMatch(newMatch);
         
         if (success) {
-            alert(matchMode === 'schedule' ? "Jogo agendado com sucesso! Envie o convite ao adversário." : "Jogo registrado com sucesso!");
+            alert(matchMode === 'schedule' ? "Convite enviado para o dono do time adversário!" : "Jogo registrado com sucesso!");
             onClose();
         } else {
             alert("Erro ao salvar jogo. Tente novamente.");
@@ -454,14 +454,16 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                     {/* Conditional Fields */}
                     {matchMode === 'schedule' ? (
                         <div className="animate-fadeIn">
-                             <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Data e Horário do Jogo</label>
+                             <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Data e Horário Proposto</label>
                              <input 
                                 type="datetime-local" 
                                 className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-lg font-bold focus:border-neon"
                                 value={scheduleDate}
                                 onChange={e => setScheduleDate(e.target.value)}
                              />
-                             <p className="text-xs text-gray-500 mt-2 text-center">O placar será definido após a partida pelos capitães.</p>
+                             <p className="text-xs text-gray-500 mt-2 text-center bg-white/5 p-2 rounded border border-white/5">
+                                 ℹ️ O status ficará <b>Pendente</b> até o adversário aceitar ou contra-propor uma nova data.
+                             </p>
                         </div>
                     ) : (
                         <div className="animate-fadeIn bg-white/5 p-4 rounded-xl border border-white/5">
@@ -512,7 +514,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                         disabled={isSaving}
                         className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
                     >
-                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Confirmar Agendamento' : '📢 Publicar Resultado')}
+                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Publicar Resultado')}
                     </button>
                 </>
             ) : (

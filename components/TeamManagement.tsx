@@ -84,6 +84,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       isStarter: boolean,
       shirtNumber: string
   }>({ bio: '', position: 'MID', isStarter: false, shirtNumber: '' });
+  const [isSavingPlayer, setIsSavingPlayer] = useState(false);
 
   // --- INVITE PLAYER STATE ---
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -114,24 +115,42 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       });
   };
 
-  const savePlayerEdit = () => {
+  const savePlayerEdit = async () => {
       if (!editingPlayer) return;
+      setIsSavingPlayer(true);
 
-      const updatedPlayers = localTeam.players.map(p => {
-          if (p.id === editingPlayer.id) {
-              return {
-                  ...p,
-                  bio: editForm.bio,
-                  position: editForm.position,
-                  isStarter: editForm.isStarter,
-                  shirtNumber: parseInt(editForm.shirtNumber) || undefined
-              };
-          }
-          return p;
-      });
+      const updatedNumber = parseInt(editForm.shirtNumber) || 0;
 
-      setLocalTeam(prev => ({ ...prev, players: updatedPlayers }));
-      setEditingPlayer(null);
+      try {
+          // Persist to DB
+          await dbService.updatePlayerDetails(editingPlayer.id, {
+              position: editForm.position,
+              shirtNumber: updatedNumber,
+              isStarter: editForm.isStarter,
+              bio: editForm.bio
+          });
+
+          // Update Local State
+          const updatedPlayers = localTeam.players.map(p => {
+              if (p.id === editingPlayer.id) {
+                  return {
+                      ...p,
+                      bio: editForm.bio,
+                      position: editForm.position,
+                      isStarter: editForm.isStarter,
+                      shirtNumber: updatedNumber || undefined
+                  };
+              }
+              return p;
+          });
+
+          setLocalTeam(prev => ({ ...prev, players: updatedPlayers }));
+          setEditingPlayer(null);
+      } catch (e) {
+          alert("Erro ao salvar alterações.");
+      } finally {
+          setIsSavingPlayer(false);
+      }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -626,7 +645,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                           <textarea 
                               value={editForm.bio}
                               onChange={e => setEditForm({...editForm, bio: e.target.value})}
-                              className="w-full bg-black/50 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none text-sm resize-none h-20"
+                              className="w-full bg-black/50 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none text-sm resize-none h-24"
                               placeholder="Ex: Especialista em cobranças de falta..."
                           />
                       </div>
@@ -644,7 +663,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
 
                       <div className="grid grid-cols-2 gap-3 mt-4">
                           <button onClick={() => setEditingPlayer(null)} className="py-3 rounded-xl font-bold text-gray-400 hover:text-white hover:bg-white/5">Cancelar</button>
-                          <button onClick={savePlayerEdit} className="py-3 rounded-xl font-bold bg-white text-black hover:bg-gray-200">Salvar</button>
+                          <button 
+                            onClick={savePlayerEdit} 
+                            disabled={isSavingPlayer}
+                            className="py-3 rounded-xl font-bold bg-white text-black hover:bg-gray-200"
+                          >
+                            {isSavingPlayer ? 'Salvando...' : 'Salvar'}
+                          </button>
                       </div>
                   </div>
               </div>
