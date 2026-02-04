@@ -87,7 +87,8 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
   
   // Data State
   const [courts, setCourts] = useState<Court[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [opponents, setOpponents] = useState<Team[]>([]);
+  const [myTeam, setMyTeam] = useState<Team | null>(null);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [myPlayers, setMyPlayers] = useState<User[]>([]);
 
@@ -122,10 +123,15 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
               dbService.getTeams()
           ]);
           setCourts(fetchedCourts);
-          setTeams(fetchedTeams.filter(t => t.id !== userTeamId)); // Filter out own team
           
-          const myTeam = fetchedTeams.find(t => t.id === userTeamId);
-          if (myTeam) setMyPlayers(myTeam.players);
+          // Separate My Team and Opponents
+          const myTeamData = fetchedTeams.find(t => t.id === userTeamId);
+          const opps = fetchedTeams.filter(t => t.id !== userTeamId);
+          
+          setMyTeam(myTeamData || null);
+          setOpponents(opps);
+          
+          if (myTeamData) setMyPlayers(myTeamData.players);
 
           // Get User Location for sorting
           if (navigator.geolocation) {
@@ -138,7 +144,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
           }
       };
       loadData();
-  }, []);
+  }, [userTeamId]);
 
   // Sort courts by distance
   const sortedCourts = React.useMemo(() => {
@@ -153,11 +159,16 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
   // Handle Goal Addition
   const addGoal = (playerId: string, playerName: string) => {
       setGoals(prev => [...prev, { playerId, playerName, teamId: userTeamId }]);
-      // Auto increment home score as visual feedback? No, let user control score manually to allow opponent goals.
+      // Auto-increment score for convenience
+      const currentScore = parseInt(homeScore) || 0;
+      setHomeScore((currentScore + 1).toString());
   };
 
   const removeGoal = (index: number) => {
       setGoals(prev => prev.filter((_, i) => i !== index));
+      // Auto-decrement score
+      const currentScore = parseInt(homeScore) || 0;
+      if (currentScore > 0) setHomeScore((currentScore - 1).toString());
   };
 
 
@@ -270,7 +281,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
     setIsSaving(true);
 
     try {
-        const opponentTeam = teams.find(t => t.id === selectedOpponentId);
+        const opponentTeam = opponents.find(t => t.id === selectedOpponentId);
         
         const finalDate = matchMode === 'schedule' ? new Date(scheduleDate) : new Date();
         const status: MatchStatus = matchMode === 'schedule' ? 'PENDING' : 'FINISHED';
@@ -366,7 +377,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                 </div>
             )}
 
-            {/* STEP 2: REGISTER COURT (Same as before, abbreviated) */}
+            {/* STEP 2: REGISTER COURT */}
             {step === 'register_court' && (
                 <div className="flex flex-col h-full">
                      <div className="h-[40vh] md:h-[300px] w-full relative flex-shrink-0 border-b-4 border-neon/20">
@@ -389,115 +400,171 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                 </div>
             )}
 
-            {/* STEP 3: MATCH DETAILS - REFACTORED */}
+            {/* STEP 3: MATCH DETAILS */}
             {step === 'match_details' && (
                 <div className="p-6 space-y-6 pb-20">
                     
+                    {/* Court Info */}
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-400 font-bold uppercase flex items-center gap-1">
+                            📍 {selectedCourt?.name}
+                        </span>
+                        <button type="button" onClick={() => setStep('select_court')} className="text-neon text-[10px] font-bold uppercase underline">Alterar</button>
+                    </div>
+
+                    {/* --- PROFESSIONAL BROADCAST HEADER --- */}
+                    <div className="bg-gradient-to-b from-gray-900 to-black rounded-3xl p-6 border border-white/10 shadow-2xl relative overflow-hidden">
+                        {/* Background Effect */}
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-neon via-white to-red-500 opacity-50"></div>
+                        <div className="absolute -inset-10 bg-gradient-to-r from-neon/10 to-red-500/10 blur-[50px] pointer-events-none"></div>
+
+                        <div className="flex items-center justify-between relative z-10">
+                            
+                            {/* MY TEAM (HOME) */}
+                            <div className="flex flex-col items-center w-1/3">
+                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-black border-2 border-neon p-1 shadow-[0_0_15px_rgba(57,255,20,0.3)] mb-2">
+                                    <img src={myTeam?.logoUrl || currentUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+                                </div>
+                                <h3 className="text-white font-display font-bold text-lg md:text-xl text-center leading-none uppercase tracking-wide">
+                                    {myTeam?.name || "Meu Time"}
+                                </h3>
+                                <span className="text-[9px] bg-neon/20 text-neon px-2 py-0.5 rounded uppercase font-bold mt-1">Mandante</span>
+                            </div>
+
+                            {/* VS / SCORE */}
+                            <div className="flex flex-col items-center justify-center w-1/3">
+                                {matchMode === 'finish' ? (
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="number" 
+                                            className="w-12 h-14 bg-black/50 border border-white/20 rounded-lg text-3xl font-display font-bold text-neon text-center focus:outline-none focus:border-neon"
+                                            value={homeScore}
+                                            onChange={e => setHomeScore(e.target.value)}
+                                            placeholder="0"
+                                        />
+                                        <span className="text-gray-500 font-bold text-xl">-</span>
+                                        <input 
+                                            type="number" 
+                                            className="w-12 h-14 bg-black/50 border border-white/20 rounded-lg text-3xl font-display font-bold text-red-500 text-center focus:outline-none focus:border-red-500"
+                                            value={awayScore}
+                                            onChange={e => setAwayScore(e.target.value)}
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="text-4xl font-display font-bold text-gray-600 italic">VS</div>
+                                )}
+                            </div>
+
+                            {/* OPPONENT (AWAY) */}
+                            <div className="flex flex-col items-center w-1/3 relative">
+                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-black border-2 border-red-500 p-1 shadow-[0_0_15px_rgba(239,68,68,0.3)] mb-2 relative group cursor-pointer overflow-hidden">
+                                     <select 
+                                        className="absolute inset-0 opacity-0 z-20 cursor-pointer"
+                                        value={selectedOpponentId}
+                                        onChange={e => setSelectedOpponentId(e.target.value)}
+                                     >
+                                        <option value="">Selecione...</option>
+                                        {opponents.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                     </select>
+                                     
+                                     {selectedOpponentId ? (
+                                         <img src={opponents.find(t => t.id === selectedOpponentId)?.logoUrl} className="w-full h-full rounded-full object-cover" />
+                                     ) : (
+                                         <div className="w-full h-full flex items-center justify-center bg-white/5 text-gray-500 font-bold text-2xl group-hover:text-white transition-colors">?</div>
+                                     )}
+                                     
+                                     {/* Overlay hint */}
+                                     {!selectedOpponentId && <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-[8px] uppercase font-bold text-center">Selecionar</div>}
+                                </div>
+                                <h3 className="text-white font-display font-bold text-lg md:text-xl text-center leading-none uppercase tracking-wide">
+                                    {opponents.find(t => t.id === selectedOpponentId)?.name || "Adversário"}
+                                </h3>
+                                <span className="text-[9px] bg-red-900/20 text-red-500 px-2 py-0.5 rounded uppercase font-bold mt-1">Visitante</span>
+                            </div>
+
+                        </div>
+                    </div>
+                    {/* --- END HEADER --- */}
+
                     {/* Mode Switcher */}
                     <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
                         <button 
                             onClick={() => setMatchMode('schedule')}
                             className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${matchMode === 'schedule' ? 'bg-neon text-black shadow-neon' : 'text-gray-400 hover:text-white'}`}
                         >
-                            📅 Agendar Futuro
+                            📅 Agendar
                         </button>
                         <button 
                             onClick={() => setMatchMode('finish')}
                             className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${matchMode === 'finish' ? 'bg-neon text-black shadow-neon' : 'text-gray-400 hover:text-white'}`}
                         >
-                            ✅ Registrar Placar
+                            ✅ Placar Final
                         </button>
-                    </div>
-
-                    {/* Court Info */}
-                    <div className="bg-gradient-to-r from-pitch-900 to-black p-4 rounded-xl border border-neon/20 flex items-center justify-between shadow-lg">
-                        <div>
-                            <p className="text-[10px] text-neon uppercase font-bold tracking-wider">Local Definido</p>
-                            <p className="text-white font-bold text-lg leading-tight">{selectedCourt?.name}</p>
-                        </div>
-                        <button type="button" onClick={() => setStep('select_court')} className="bg-white/5 p-2 rounded-lg text-white">✏️</button>
-                    </div>
-
-                    {/* Matchup Inputs */}
-                    <div className="flex items-center justify-between gap-2">
-                         {/* My Team */}
-                         <div className="flex flex-col items-center gap-2">
-                             <div className="w-16 h-16 rounded-full bg-pitch-800 flex items-center justify-center font-display text-2xl text-white font-bold border-2 border-neon">{currentUser.name.charAt(0)}</div>
-                             <span className="text-xs font-bold text-white max-w-[80px] truncate">{currentUser.name}</span>
-                             {matchMode === 'finish' && (
-                                <input type="number" placeholder="0" className="w-16 h-12 bg-black border border-pitch-600 rounded-lg text-center text-2xl font-display font-bold text-neon" value={homeScore} onChange={e => setHomeScore(e.target.value)} />
-                             )}
-                         </div>
-
-                         <span className="text-gray-600 font-display text-4xl italic">VS</span>
-
-                         {/* Opponent */}
-                         <div className="flex flex-col items-center gap-2 relative">
-                             <select className="absolute inset-0 opacity-0 z-10 w-full h-full cursor-pointer" value={selectedOpponentId} onChange={e => setSelectedOpponentId(e.target.value)}>
-                                 <option value="">Selecione...</option>
-                                 {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                             </select>
-                             <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 overflow-hidden ${selectedOpponentId ? 'border-red-500' : 'border-gray-600 border-dashed bg-white/5'}`}>
-                                 {selectedOpponentId ? (
-                                     <img src={teams.find(t => t.id === selectedOpponentId)?.logoUrl} className="w-full h-full object-cover" />
-                                 ) : (
-                                     <span className="text-2xl text-gray-500">+</span>
-                                 )}
-                             </div>
-                             <span className="text-xs font-bold text-white max-w-[80px] truncate min-h-[16px]">{teams.find(t => t.id === selectedOpponentId)?.name || 'Adversário'}</span>
-                             {matchMode === 'finish' && (
-                                <input type="number" placeholder="0" className="w-16 h-12 bg-black border border-pitch-600 rounded-lg text-center text-2xl font-display font-bold text-red-500" value={awayScore} onChange={e => setAwayScore(e.target.value)} />
-                             )}
-                         </div>
                     </div>
 
                     {/* Conditional Fields */}
                     {matchMode === 'schedule' ? (
                         <div className="animate-fadeIn">
-                             <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Data e Horário Proposto</label>
+                             <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Data e Horário</label>
                              <input 
                                 type="datetime-local" 
                                 className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-lg font-bold focus:border-neon"
                                 value={scheduleDate}
                                 onChange={e => setScheduleDate(e.target.value)}
                              />
-                             <p className="text-xs text-gray-500 mt-2 text-center bg-white/5 p-2 rounded border border-white/5">
-                                 ℹ️ O status ficará <b>Pendente</b> até o adversário aceitar ou contra-propor uma nova data.
-                             </p>
                         </div>
                     ) : (
-                        <div className="animate-fadeIn bg-white/5 p-4 rounded-xl border border-white/5">
-                             <h4 className="text-neon text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                                ⚽ Quem fez os gols?
-                             </h4>
-                             {/* Scorer Selector */}
-                             <div className="flex gap-2 overflow-x-auto pb-2 mb-3 no-scrollbar">
-                                 {myPlayers.map(p => (
-                                     <button 
-                                        key={p.id}
-                                        type="button"
-                                        onClick={() => addGoal(p.id, p.name)}
-                                        className="flex-shrink-0 flex flex-col items-center gap-1 group"
-                                     >
-                                         <img src={p.avatarUrl} className="w-10 h-10 rounded-full border border-gray-600 group-hover:border-neon transition-colors" />
-                                         <span className="text-[9px] text-gray-400 truncate w-12 text-center">{p.name}</span>
-                                     </button>
-                                 ))}
+                        <div className="animate-fadeIn space-y-4">
+                             {/* GOAL SCORER SELECTION */}
+                             <div>
+                                 <h4 className="text-neon text-xs font-bold uppercase mb-3 flex items-center gap-2 border-b border-white/10 pb-2">
+                                    <span>⚽</span> Registrar Gols (Meu Time)
+                                 </h4>
+                                 
+                                 {/* Player List Horizontal Scroll */}
+                                 <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
+                                     {myPlayers.map(p => (
+                                         <button 
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => addGoal(p.id, p.name)}
+                                            className="flex-shrink-0 flex flex-col items-center gap-2 group min-w-[70px]"
+                                         >
+                                             <div className="relative">
+                                                 <img src={p.avatarUrl} className="w-12 h-12 rounded-full border border-gray-600 group-hover:border-neon group-active:scale-95 transition-all object-cover bg-gray-800" />
+                                                 {p.shirtNumber && (
+                                                     <div className="absolute -bottom-2 -right-1 w-6 h-6 bg-black border border-neon rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-lg">
+                                                         {p.shirtNumber}
+                                                     </div>
+                                                 )}
+                                             </div>
+                                             <span className="text-[10px] text-gray-400 font-bold truncate w-full text-center group-hover:text-white">{p.name.split(' ')[0]}</span>
+                                         </button>
+                                     ))}
+                                     {myPlayers.length === 0 && <p className="text-xs text-gray-500 italic">Adicione jogadores ao elenco para registrar gols.</p>}
+                                 </div>
                              </div>
                              
-                             {/* Goals List */}
-                             <div className="space-y-1">
-                                 {goals.map((g, idx) => (
-                                     <div key={idx} className="flex justify-between items-center bg-black/30 p-2 rounded border border-white/5">
-                                         <div className="flex items-center gap-2">
-                                             <span className="text-lg">⚽</span>
-                                             <span className="text-sm font-bold text-white">{g.playerName}</span>
+                             {/* Goals Summary Log */}
+                             {goals.length > 0 && (
+                                 <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                                     {goals.map((g, idx) => (
+                                         <div key={idx} className="flex justify-between items-center p-3 border-b border-white/5 last:border-0 hover:bg-white/5">
+                                             <div className="flex items-center gap-3">
+                                                 <span className="text-neon font-display text-lg font-bold">#{idx + 1}</span>
+                                                 <div>
+                                                     <p className="text-xs font-bold text-white uppercase">{g.playerName}</p>
+                                                     <p className="text-[9px] text-gray-500">Gol do Mandante</p>
+                                                 </div>
+                                             </div>
+                                             <button onClick={() => removeGoal(idx)} className="text-red-500 hover:text-white bg-red-900/20 hover:bg-red-600 rounded p-1.5 transition-colors">
+                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                             </button>
                                          </div>
-                                         <button onClick={() => removeGoal(idx)} className="text-red-500 text-xs font-bold px-2">Remover</button>
-                                     </div>
-                                 ))}
-                                 {goals.length === 0 && <p className="text-xs text-gray-600 italic text-center">Nenhum gol registrado.</p>}
-                             </div>
+                                     ))}
+                                 </div>
+                             )}
                         </div>
                     )}
                 </div>
@@ -514,7 +581,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                         disabled={isSaving}
                         className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
                     >
-                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Publicar Resultado')}
+                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Finalizar Jogo')}
                     </button>
                 </>
             ) : (
