@@ -122,71 +122,81 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams }
 
       </MapContainer>
 
-      {/* OVERLAY: Status do Mapa */}
-      <div className="absolute top-24 left-4 md:top-4 md:left-4 z-[400] flex flex-col gap-2 pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-neon/30 flex items-center gap-2 shadow-lg animate-fadeIn w-fit">
-             <div className="w-2 h-2 bg-neon rounded-full animate-pulse shadow-[0_0_8px_#39ff14]"></div>
-             <span className="text-[10px] font-bold text-white uppercase tracking-wider">Ao Vivo • {territories.length} Zonas</span>
+      {/* OVERLAY: Status Badge (Centered for Mobile) */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
+          <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-neon/30 flex items-center gap-2.5 shadow-lg animate-fadeIn">
+             <div className="relative">
+                 <div className="w-2 h-2 bg-neon rounded-full animate-none"></div>
+                 <div className="absolute inset-0 bg-neon rounded-full animate-ping opacity-75"></div>
+             </div>
+             <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest leading-none">
+                 Ao Vivo <span className="text-gray-500 mx-1">•</span> {territories.length} Zonas
+             </span>
           </div>
       </div>
 
-      {/* OVERLAY: Card de Detalhes do Território (Bottom Sheet) */}
+      {/* OVERLAY: Bottom Sheet Territory Details */}
       {selectedTerritory && (
-        <div className="absolute bottom-0 left-0 right-0 md:bottom-6 md:left-6 md:right-auto md:w-96 z-[500] p-4 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-           <div className="bg-black/80 backdrop-blur-xl border-t md:border border-white/10 rounded-t-3xl md:rounded-3xl p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.8)] relative overflow-hidden group">
-               
-               {/* Background Gradient based on owner color */}
-               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-neon via-white to-transparent opacity-50"></div>
+        <div className="absolute bottom-20 left-2 right-2 md:bottom-6 md:left-6 md:right-auto md:w-96 z-[1000] animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+           <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5">
                
                {/* Close Button */}
                <button 
                   onClick={(e) => { e.stopPropagation(); setSelectedTerritory(null); }} 
-                  className="absolute top-4 right-4 text-gray-500 hover:text-white bg-white/5 hover:bg-white/20 rounded-full p-2 transition-colors z-20"
+                  className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-20"
                >
-                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+                 ✕
                </button>
 
-               <div className="flex items-start gap-4 mb-4 relative z-10">
-                   {/* Big Logo */}
-                   <div className="w-16 h-16 rounded-2xl bg-black border border-white/10 p-1 shadow-lg relative">
-                        {teams.find(t => t.id === selectedTerritory.ownerTeamId)?.logoUrl ? (
-                            <img src={teams.find(t => t.id === selectedTerritory.ownerTeamId)?.logoUrl} className="w-full h-full object-cover rounded-xl" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-2xl">🏳️</div>
-                        )}
-                        {/* Status Dot */}
-                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-black ${selectedTerritory.ownerTeamId ? 'bg-red-500' : 'bg-green-500'}`}></div>
+               <div className="flex items-center gap-4 mb-5 relative z-10 pr-8">
+                   {/* Logo with status ring */}
+                   <div className="relative">
+                        <div className={`w-16 h-16 rounded-2xl bg-black border-2 p-1 shadow-lg ${selectedTerritory.ownerTeamId ? 'border-red-500 shadow-red-900/20' : 'border-neon shadow-neon/20'}`}>
+                                {teams.find(t => t.id === selectedTerritory.ownerTeamId)?.logoUrl ? (
+                                    <img src={teams.find(t => t.id === selectedTerritory.ownerTeamId)?.logoUrl} className="w-full h-full object-cover rounded-xl" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-2xl text-gray-600">🏳️</div>
+                                )}
+                        </div>
+                        {selectedTerritory.ownerTeamId && <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 border-2 border-black rounded-full"></div>}
                    </div>
 
                    <div>
-                       <h3 className="text-2xl font-display font-bold text-white uppercase leading-none mb-1">{selectedTerritory.name}</h3>
-                       <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                               {selectedTerritory.ownerTeamId ? 'Dominado por' : 'Disponível'}
-                           </span>
-                           {selectedTerritory.ownerTeamId && (
-                               <span className="text-[10px] font-bold text-white uppercase bg-white/10 px-2 py-0.5 rounded">
-                                   {teams.find(t => t.id === selectedTerritory.ownerTeamId)?.name}
-                               </span>
-                           )}
-                       </div>
+                       <h3 className="text-xl font-display font-bold text-white uppercase leading-tight mb-1">{selectedTerritory.name}</h3>
+                       {selectedTerritory.ownerTeamId ? (
+                           <div className="flex items-center gap-1.5">
+                               <span className="text-[10px] text-red-400 uppercase font-bold tracking-wider">Dominado por</span>
+                               <span className="text-xs text-white font-bold truncate max-w-[120px]">{teams.find(t => t.id === selectedTerritory.ownerTeamId)?.name}</span>
+                           </div>
+                       ) : (
+                           <span className="text-xs text-neon uppercase font-bold tracking-widest bg-neon/10 px-2 py-0.5 rounded">Território Livre</span>
+                       )}
                    </div>
                </div>
 
-               <div className="grid grid-cols-2 gap-3 mb-4 relative z-10">
-                   <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                       <p className="text-[9px] text-gray-400 uppercase font-bold">Valor</p>
-                       <p className="text-xl font-display font-bold text-neon">{selectedTerritory.points} PTS</p>
+               <div className="grid grid-cols-2 gap-3 mb-5 relative z-10">
+                   <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex flex-col items-center justify-center">
+                       <p className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Valor</p>
+                       <p className="text-xl font-display font-bold text-white">{selectedTerritory.points} <span className="text-xs text-gray-500">PTS</span></p>
                    </div>
-                   <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                       <p className="text-[9px] text-gray-400 uppercase font-bold">Status</p>
-                       <p className="text-sm font-bold text-white">{selectedTerritory.ownerTeamId ? '🛡️ Protegido' : '🔓 Livre'}</p>
+                   <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex flex-col items-center justify-center">
+                       <p className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Status</p>
+                       <p className={`text-sm font-bold ${selectedTerritory.ownerTeamId ? 'text-red-400' : 'text-neon'}`}>
+                           {selectedTerritory.ownerTeamId ? '🛡️ Protegido' : '🔓 Disponível'}
+                       </p>
                    </div>
                </div>
                
-               <button className="w-full bg-neon text-black font-bold py-4 rounded-xl uppercase tracking-widest shadow-[0_0_20px_rgba(57,255,20,0.4)] hover:scale-[1.02] active:scale-95 transition-all relative z-10">
-                  {selectedTerritory.ownerTeamId ? '⚔️ Desafiar Dono' : '🚩 Reivindicar'}
+               <button className={`w-full font-bold py-3.5 rounded-xl uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all relative z-10 ${
+                   selectedTerritory.ownerTeamId 
+                   ? 'bg-red-600 text-white shadow-red-900/30' 
+                   : 'bg-neon text-black shadow-neon/30'
+               }`}>
+                  {selectedTerritory.ownerTeamId ? '⚔️ Desafiar Dono' : '🚩 Reivindicar Agora'}
                </button>
+
+               {/* Decorative Gradient */}
+               <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 pointer-events-none ${selectedTerritory.ownerTeamId ? 'bg-red-600' : 'bg-neon'}`}></div>
 
            </div>
         </div>

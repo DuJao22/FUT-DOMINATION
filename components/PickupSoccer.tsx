@@ -147,105 +147,149 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
     });
 
     return (
-        <div className="space-y-6 pb-24 h-full flex flex-col">
+        <div className="space-y-6 pb-24 h-full flex flex-col relative max-w-4xl mx-auto w-full">
             
             {/* Header */}
-            <div className="flex justify-between items-center px-2">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-end px-2 gap-4">
                 <div>
-                    <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide">
-                        Peladas <span className="text-neon">Locais</span>
+                    <h2 className="text-4xl font-display font-bold text-white uppercase italic tracking-wide drop-shadow-md">
+                        Peladas <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Locais</span>
                     </h2>
-                    <p className="text-gray-400 text-xs">Encontre jogos ou marque o seu.</p>
+                    <p className="text-gray-400 text-sm font-medium">Encontre jogos próximos ou organize a resenha.</p>
                 </div>
-                <div className="bg-pitch-900 p-1 rounded-lg border border-white/10 flex">
+                
+                {/* Tabs / Switcher */}
+                <div className="bg-black/40 backdrop-blur-md p-1 rounded-xl border border-white/10 flex self-start">
                     <button 
                         onClick={() => setActiveTab('explore')}
-                        className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'explore' ? 'bg-neon text-black' : 'text-gray-400'}`}
+                        className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase transition-all duration-300 flex items-center gap-2 ${activeTab === 'explore' ? 'bg-neon text-pitch-950 shadow-[0_0_15px_rgba(57,255,20,0.4)]' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                     >
-                        Explorar
+                        <span>🔭</span> Explorar
                     </button>
                     <button 
                         onClick={() => setActiveTab('create')}
-                        className={`px-4 py-2 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'create' ? 'bg-neon text-black' : 'text-gray-400'}`}
+                        className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase transition-all duration-300 flex items-center gap-2 ${activeTab === 'create' ? 'bg-neon text-pitch-950 shadow-[0_0_15px_rgba(57,255,20,0.4)]' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                     >
-                        Criar
+                        <span>📅</span> Criar Jogo
                     </button>
                 </div>
             </div>
 
             {/* EXPLORE TAB */}
             {activeTab === 'explore' && (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-[fadeIn_0.4s_ease-out]">
                     {loading ? (
-                        <div className="text-center py-10 text-gray-500">Carregando jogos...</div>
+                        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                            <div className="w-10 h-10 border-4 border-neon border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-neon text-xs font-bold uppercase tracking-widest animate-pulse">Buscando Jogos...</p>
+                        </div>
                     ) : games.length === 0 ? (
-                        <div className="text-center py-12 bg-white/5 rounded-2xl border border-dashed border-white/10 mx-4">
-                            <span className="text-4xl block mb-2 opacity-50">⚽</span>
-                            <p className="font-bold text-white">Nenhuma pelada encontrada.</p>
-                            <p className="text-xs text-gray-500 mt-1">Seja o primeiro a marcar um jogo na sua área!</p>
-                            <button onClick={() => setActiveTab('create')} className="mt-4 bg-neon text-black font-bold px-6 py-2 rounded-lg text-xs hover:bg-white">Criar Pelada</button>
+                        <div className="text-center py-16 bg-gradient-to-b from-white/5 to-transparent rounded-3xl border border-dashed border-white/10 mx-2">
+                            <div className="w-20 h-20 bg-pitch-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                                <span className="text-4xl opacity-50">🏟️</span>
+                            </div>
+                            <h3 className="font-bold text-white text-lg">Nenhuma pelada encontrada.</h3>
+                            <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">Seja o pioneiro! Crie o primeiro jogo da região e convide a galera.</p>
+                            <button onClick={() => setActiveTab('create')} className="mt-6 bg-white text-black font-bold px-8 py-3 rounded-xl text-sm hover:scale-105 transition-transform shadow-lg">Criar Pelada Agora</button>
                         </div>
                     ) : (
-                        <div className="grid gap-4 px-2 md:grid-cols-2">
+                        <div className="grid gap-6 px-2 md:grid-cols-2 lg:grid-cols-2">
                             {games.map(game => {
                                 const isJoined = game.confirmedPlayers.includes(currentUser.id);
                                 const slotsLeft = game.maxPlayers - game.confirmedPlayers.length;
                                 const percent = (game.confirmedPlayers.length / game.maxPlayers) * 100;
+                                const dateObj = new Date(game.date);
                                 
                                 return (
-                                    <div key={game.id} className="bg-pitch-900 border border-white/10 rounded-2xl p-4 shadow-lg hover:border-neon/30 transition-colors">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h3 className="text-lg font-bold text-white">{game.title}</h3>
-                                                <button 
-                                                    onClick={() => setViewingLocation({lat: game.lat, lng: game.lng, name: game.locationName})}
-                                                    className="text-xs text-gray-400 flex items-center gap-1 hover:text-neon transition-colors mt-1 group"
-                                                >
-                                                    <span>📍</span> 
-                                                    <span className="group-hover:underline decoration-dashed decoration-gray-600 underline-offset-2 group-hover:decoration-neon text-left">{game.locationName}</span>
-                                                    <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded ml-1 group-hover:bg-neon group-hover:text-black transition-colors">Ver Mapa</span>
-                                                </button>
-                                            </div>
-                                            <div className="bg-black/40 px-2 py-1 rounded text-center">
-                                                <span className="block text-[10px] text-gray-400 uppercase font-bold">Data</span>
-                                                <span className="text-neon font-bold text-xs">
-                                                    {new Date(game.date).toLocaleDateString()}
-                                                </span>
-                                                <span className="block text-[10px] text-white">
-                                                    {new Date(game.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                                </span>
-                                            </div>
-                                        </div>
+                                    <div key={game.id} className="relative group overflow-hidden bg-pitch-950 border border-white/10 rounded-[2rem] hover:border-neon/40 transition-all duration-300 shadow-2xl hover:shadow-[0_0_30px_rgba(57,255,20,0.1)]">
+                                        
+                                        {/* Decorative Gradient Glow */}
+                                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-neon/10 rounded-full blur-[60px] pointer-events-none group-hover:bg-neon/20 transition-colors"></div>
 
-                                        <p className="text-xs text-gray-300 mb-4 line-clamp-2">{game.description || "Sem descrição."}</p>
+                                        <div className="p-6 relative z-10">
+                                            
+                                            {/* Header: Date Badge & Title */}
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex-1 pr-4">
+                                                    <h3 className="text-2xl font-display font-bold text-white uppercase leading-none mb-2 truncate group-hover:text-neon transition-colors">
+                                                        {game.title}
+                                                    </h3>
+                                                    
+                                                    {/* Location Pill */}
+                                                    <button 
+                                                        onClick={() => setViewingLocation({lat: game.lat, lng: game.lng, name: game.locationName})}
+                                                        className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-neon/50 px-3 py-1.5 rounded-lg transition-all group/loc"
+                                                    >
+                                                        <span className="text-neon text-lg">📍</span> 
+                                                        <span className="text-xs font-bold text-gray-300 group-hover/loc:text-white truncate max-w-[150px]">{game.locationName}</span>
+                                                        <span className="text-[10px] text-neon uppercase font-bold opacity-0 group-hover/loc:opacity-100 transition-opacity ml-1">Ver Mapa</span>
+                                                    </button>
+                                                </div>
 
-                                        {/* Progress Bar */}
-                                        <div className="mb-4">
-                                            <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
-                                                <span className="text-gray-400">Confirmados</span>
-                                                <span className={slotsLeft === 0 ? 'text-red-500' : 'text-neon'}>
-                                                    {game.confirmedPlayers.length}/{game.maxPlayers}
-                                                </span>
+                                                {/* Date Ticket */}
+                                                <div className="flex flex-col items-center justify-center bg-black/50 backdrop-blur-md border border-white/10 rounded-xl p-2 min-w-[70px]">
+                                                    <span className="text-neon font-display font-bold text-2xl leading-none">{dateObj.getDate()}</span>
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
+                                                    <div className="w-full h-px bg-white/10 my-1"></div>
+                                                    <span className="text-white font-bold text-xs">{dateObj.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                                </div>
                                             </div>
-                                            <div className="h-2 bg-black rounded-full overflow-hidden">
-                                                <div className={`h-full ${slotsLeft === 0 ? 'bg-red-500' : 'bg-neon'}`} style={{ width: `${percent}%` }}></div>
-                                            </div>
-                                        </div>
 
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] text-gray-500">Host: {game.hostName}</span>
+                                            {/* Description */}
+                                            <div className="mb-6">
+                                                <p className="text-xs text-gray-400 leading-relaxed line-clamp-2 italic">
+                                                    "{game.description || "Resenha garantida. Traga sua chuteira e colete se tiver."}"
+                                                </p>
+                                            </div>
+
+                                            {/* Host & Progress Section */}
+                                            <div className="bg-black/30 rounded-xl p-3 border border-white/5 mb-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-black p-[1px]">
+                                                        <img 
+                                                            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(game.hostName)}&background=random`} 
+                                                            className="w-full h-full rounded-full object-cover" 
+                                                            alt="Host"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[9px] text-gray-500 uppercase font-bold">Organizador</p>
+                                                        <p className="text-xs text-white font-bold">{game.hostName}</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="text-right">
+                                                    <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">
+                                                        {slotsLeft === 0 ? 'Lotado' : `${slotsLeft} Vagas Restantes`}
+                                                    </p>
+                                                    <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className={`h-full shadow-[0_0_10px_currentColor] transition-all duration-500 ${slotsLeft === 0 ? 'bg-red-500 text-red-500' : 'bg-neon text-neon'}`} 
+                                                            style={{ width: `${percent}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Action Button */}
                                             <button 
                                                 onClick={() => handleJoin(game)}
-                                                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-transform active:scale-95 ${
+                                                className={`w-full py-4 rounded-xl font-display font-bold text-xl uppercase tracking-widest transition-all transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${
                                                     isJoined 
-                                                    ? 'bg-red-900/50 text-red-300 border border-red-500/30 hover:bg-red-900' 
+                                                    ? 'bg-red-900/20 text-red-500 border border-red-500/30 hover:bg-red-900/40' 
                                                     : slotsLeft === 0 
-                                                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                                                        : 'bg-neon text-black shadow-neon hover:bg-white'
+                                                        ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5'
+                                                        : 'bg-neon text-pitch-950 hover:bg-white hover:scale-[1.01] shadow-neon/40'
                                                 }`}
                                                 disabled={!isJoined && slotsLeft === 0}
                                             >
-                                                {isJoined ? 'Sair do Jogo' : slotsLeft === 0 ? 'Lotado' : 'Eu Vou!'}
+                                                {isJoined ? (
+                                                    <><span>✕</span> Cancelar Presença</>
+                                                ) : slotsLeft === 0 ? (
+                                                    <><span>🔒</span> Lista de Espera</>
+                                                ) : (
+                                                    <><span>⚡</span> Confirmar Presença</>
+                                                )}
                                             </button>
                                         </div>
                                     </div>
@@ -258,17 +302,17 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
 
             {/* CREATE TAB */}
             {activeTab === 'create' && (
-                <div className="flex flex-col h-full bg-pitch-900 rounded-t-3xl border-t border-white/10 overflow-hidden shadow-2xl">
+                <div className="flex flex-col h-full bg-pitch-900 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-[slideUp_0.4s_ease-out]">
                     {/* Step Indicator */}
-                    <div className="flex bg-black p-2">
-                        <div className={`flex-1 text-center text-xs font-bold py-2 ${formStep === 1 ? 'text-neon border-b-2 border-neon' : 'text-gray-500'}`}>1. Local</div>
-                        <div className={`flex-1 text-center text-xs font-bold py-2 ${formStep === 2 ? 'text-neon border-b-2 border-neon' : 'text-gray-500'}`}>2. Detalhes</div>
+                    <div className="flex bg-black/50 backdrop-blur-sm border-b border-white/10">
+                        <div className={`flex-1 text-center text-xs font-bold py-4 uppercase tracking-widest transition-colors ${formStep === 1 ? 'text-neon bg-white/5' : 'text-gray-600'}`}>1. Onde?</div>
+                        <div className={`flex-1 text-center text-xs font-bold py-4 uppercase tracking-widest transition-colors ${formStep === 2 ? 'text-neon bg-white/5' : 'text-gray-600'}`}>2. Detalhes</div>
                     </div>
 
                     {formStep === 1 && (
                         <div className="flex-1 relative flex flex-col">
                             {/* Map */}
-                            <div className="flex-1 relative z-0">
+                            <div className="flex-1 relative z-0 min-h-[400px]">
                                 <MapContainer center={[-23.5505, -46.6333]} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
                                     {/* Show Existing Courts Markers */}
@@ -289,24 +333,26 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                                 </MapContainer>
                                 
                                 {/* Overlay hint */}
-                                <div className="absolute top-4 left-4 z-[400] bg-black/70 px-3 py-2 rounded-lg text-white text-xs backdrop-blur-md border border-white/10">
-                                    Toque no mapa ou em uma quadra existente.
+                                <div className="absolute top-4 left-4 right-4 z-[400] flex justify-center pointer-events-none">
+                                    <div className="bg-black/70 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-2">
+                                        <span className="text-neon animate-pulse">●</span> Toque no mapa ou em uma quadra.
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="p-4 bg-pitch-950 border-t border-white/10 z-10">
-                                <p className="text-gray-400 text-xs mb-2 font-bold uppercase">Local Escolhido:</p>
+                            <div className="p-6 bg-pitch-950 border-t border-neon/20 z-10 rounded-t-3xl -mt-6 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                                <label className="block text-gray-400 text-[10px] font-bold uppercase mb-2 ml-1">Nome do Local</label>
                                 <input 
                                     type="text" 
                                     value={locationName} 
                                     onChange={e => setLocationName(e.target.value)}
-                                    placeholder="Nome do local (Ex: Quadra do Zé)"
-                                    className="w-full bg-black border border-white/20 rounded-lg p-3 text-white text-sm mb-4 focus:border-neon focus:outline-none"
+                                    placeholder="Ex: Quadra do Zé, Parque Villa Lobos..."
+                                    className="w-full bg-black border border-white/20 rounded-xl p-4 text-white text-sm mb-4 focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon transition-all"
                                 />
                                 <button 
                                     onClick={() => setFormStep(2)}
                                     disabled={!newGameLocation}
-                                    className="w-full bg-neon text-black font-bold py-3 rounded-xl disabled:opacity-50"
+                                    className="w-full bg-neon text-black font-bold py-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white hover:scale-[1.02] transition-all uppercase tracking-widest shadow-neon"
                                 >
                                     Confirmar Local
                                 </button>
@@ -315,65 +361,69 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                     )}
 
                     {formStep === 2 && (
-                        <div className="p-6 space-y-4 bg-pitch-900 h-full overflow-y-auto">
-                            <div>
-                                <label className="block text-neon text-xs font-bold uppercase mb-1">Título da Pelada</label>
-                                <input 
-                                    type="text" 
-                                    value={gameTitle}
-                                    onChange={e => setGameTitle(e.target.value)}
-                                    placeholder="Ex: Fut de Sexta"
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-neon focus:outline-none"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-gray-400 text-xs font-bold uppercase mb-1">Data e Hora</label>
-                                <input 
-                                    type="datetime-local" 
-                                    value={gameDate}
-                                    onChange={e => setGameDate(e.target.value)}
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-neon focus:outline-none"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-gray-400 text-xs font-bold uppercase mb-1">Máximo de Jogadores</label>
-                                <div className="flex items-center gap-4">
+                        <div className="p-8 space-y-6 bg-pitch-950 h-full overflow-y-auto">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-neon text-xs font-bold uppercase mb-2 ml-1">Título da Pelada</label>
                                     <input 
-                                        type="range" 
-                                        min="10" 
-                                        max="30" 
-                                        step="1" 
-                                        value={maxPlayers}
-                                        onChange={e => setMaxPlayers(parseInt(e.target.value))}
-                                        className="flex-1 accent-neon h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                        type="text" 
+                                        value={gameTitle}
+                                        onChange={e => setGameTitle(e.target.value)}
+                                        placeholder="Ex: Fut de Sexta - Só os craques"
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-neon focus:outline-none focus:bg-black transition-all"
                                     />
-                                    <span className="text-xl font-bold text-white w-10 text-center">{maxPlayers}</span>
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-400 text-xs font-bold uppercase mb-2 ml-1">Data e Hora</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        value={gameDate}
+                                        onChange={e => setGameDate(e.target.value)}
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-neon focus:outline-none focus:bg-black transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-400 text-xs font-bold uppercase mb-2 ml-1">Lotação Máxima</label>
+                                    <div className="bg-black/30 border border-white/5 rounded-xl p-4 flex items-center gap-6">
+                                        <input 
+                                            type="range" 
+                                            min="10" 
+                                            max="30" 
+                                            step="1" 
+                                            value={maxPlayers}
+                                            onChange={e => setMaxPlayers(parseInt(e.target.value))}
+                                            className="flex-1 accent-neon h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                        />
+                                        <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center border border-white/10">
+                                            <span className="text-xl font-bold text-neon">{maxPlayers}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-gray-400 text-xs font-bold uppercase mb-2 ml-1">Regras / Observações</label>
+                                    <textarea 
+                                        value={description}
+                                        onChange={e => setDescription(e.target.value)}
+                                        placeholder="Ex: Levar colete, R$ 10,00 por pessoa, proibido carrinho..."
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-neon focus:outline-none h-32 resize-none focus:bg-black transition-all"
+                                    />
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-gray-400 text-xs font-bold uppercase mb-1">Descrição / Regras</label>
-                                <textarea 
-                                    value={description}
-                                    onChange={e => setDescription(e.target.value)}
-                                    placeholder="Levar colete, 10 reais por pessoa..."
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-neon focus:outline-none h-24 resize-none"
-                                />
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
+                            <div className="flex gap-4 pt-4 border-t border-white/5">
                                 <button 
                                     onClick={() => setFormStep(1)}
-                                    className="flex-1 bg-gray-700 text-white font-bold py-3 rounded-xl"
+                                    className="w-16 bg-white/5 text-gray-400 font-bold py-4 rounded-xl hover:bg-white/10 hover:text-white transition-colors"
                                 >
-                                    Voltar
+                                    ←
                                 </button>
                                 <button 
                                     onClick={handleCreateGame}
                                     disabled={!gameTitle || !gameDate}
-                                    className="flex-[2] bg-neon text-black font-bold py-3 rounded-xl disabled:opacity-50 hover:bg-white transition-colors"
+                                    className="flex-1 bg-neon text-black font-bold py-4 rounded-xl disabled:opacity-50 hover:bg-white hover:scale-[1.02] transition-all uppercase tracking-widest shadow-neon"
                                 >
                                     Agendar Jogo 🚀
                                 </button>
@@ -386,13 +436,13 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
             {/* LOCATION MODAL */}
             {viewingLocation && (
                 <div className="fixed inset-0 bg-black/90 z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
-                    <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden flex flex-col h-[60vh] shadow-2xl relative">
+                    <div className="bg-pitch-950 border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden flex flex-col h-[60vh] shadow-2xl relative">
                         <div className="p-4 bg-pitch-900 border-b border-white/10 flex justify-between items-center z-10">
                             <div>
                                 <h3 className="font-bold text-white flex items-center gap-2">📍 Localização</h3>
                                 <p className="text-xs text-gray-400">{viewingLocation.name}</p>
                             </div>
-                            <button onClick={() => setViewingLocation(null)} className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full text-white hover:bg-white/20">✕</button>
+                            <button onClick={() => setViewingLocation(null)} className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">✕</button>
                         </div>
                         <div className="flex-1 relative z-0">
                             <MapContainer center={[viewingLocation.lat, viewingLocation.lng]} zoom={15} style={{ height: "100%", width: "100%" }} zoomControl={false}>
@@ -405,9 +455,9 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                                 href={`https://www.google.com/maps/search/?api=1&query=${viewingLocation.lat},${viewingLocation.lng}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="block w-full bg-neon text-black font-bold text-center py-3 rounded-xl uppercase tracking-widest shadow-neon hover:scale-[1.02] transition-transform"
+                                className="block w-full bg-neon text-black font-bold text-center py-4 rounded-xl uppercase tracking-widest shadow-neon hover:scale-[1.02] transition-transform flex items-center justify-center gap-2"
                             >
-                                Abrir no Google Maps 🗺️
+                                <span>🗺️</span> Abrir no Google Maps
                             </a>
                         </div>
                     </div>

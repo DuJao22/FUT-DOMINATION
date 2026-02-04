@@ -839,6 +839,41 @@ class DatabaseService {
 
           // 3. Join
           await this.query(`INSERT INTO ${TABLES.PICKUP_ATTENDANCE} (game_id, user_id) VALUES (?, ?)`, [gameId, userId]);
+
+          // --- NOTIFICATION LOGIC START ---
+          // Notify other players
+          try {
+              // Get Game Title
+              const gameRes = await this.query(`SELECT title FROM ${TABLES.PICKUP_GAMES} WHERE id = ?`, [gameId]);
+              const gameTitle = (gameRes as any[])[0]?.title || "Pelada";
+
+              // Get User Name
+              const joiningUserRes = await this.query(`SELECT name, avatar_url FROM ${TABLES.USERS} WHERE id = ?`, [userId]);
+              const joiningUserName = (joiningUserRes as any[])[0]?.name || "Um jogador";
+              const joiningUserAvatar = (joiningUserRes as any[])[0]?.avatar_url;
+
+              // Get all OTHER attendees
+              const attendeesRes = await this.query(`SELECT user_id FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id != ?`, [gameId, userId]);
+              
+              if (Array.isArray(attendeesRes)) {
+                  for (const row of attendeesRes) {
+                      await this.createNotification(
+                          row.user_id,
+                          'PICKUP_JOIN',
+                          'Reforço Chegando! ⚽',
+                          `${joiningUserName} confirmou presença em "${gameTitle}".`,
+                          gameId,
+                          joiningUserAvatar,
+                          { gameId }
+                      );
+                  }
+              }
+          } catch (notifError) {
+              console.error("Failed to send pickup notifications", notifError);
+              // Don't fail the join action just because notification failed
+          }
+          // --- NOTIFICATION LOGIC END ---
+
           return { success: true, message: "Presença confirmada!" };
 
       } catch (e) {
