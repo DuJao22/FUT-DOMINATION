@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Team, UserRole, User } from '../types';
 import { dbService } from '../services/database';
 
@@ -30,11 +30,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
   
   // Local state to handle UI updates immediately
   const [localTeam, setLocalTeam] = useState<Team>(team);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- EDIT TEAM INFO STATE ---
   const [isEditingName, setIsEditingName] = useState(false);
   const [teamName, setTeamName] = useState(team.name);
+  
+  // --- EDIT LOGO STATE ---
+  const [isEditingLogo, setIsEditingLogo] = useState(false);
+  const [logoUrlInput, setLogoUrlInput] = useState(team.logoUrl);
 
   // --- EDIT PLAYER STATE ---
   const [editingPlayer, setEditingPlayer] = useState<User | null>(null);
@@ -52,21 +55,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
 
   // --- HANDLERS ---
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              // Simulate upload by setting base64
-              setLocalTeam(prev => ({ ...prev, logoUrl: reader.result as string }));
-          };
-          reader.readAsDataURL(file);
-      }
+  const handleSaveLogo = () => {
+      if (!logoUrlInput.trim()) return;
+      setLocalTeam(prev => ({ ...prev, logoUrl: logoUrlInput }));
+      setIsEditingLogo(false);
+      // In a real app, call dbService.updateTeam(...) here
   };
 
   const handleSaveName = () => {
     setLocalTeam(prev => ({ ...prev, name: teamName }));
     setIsEditingName(false);
+    // In a real app, call dbService.updateTeam(...) here
   };
 
   const openPlayerEdit = (player: User) => {
@@ -160,19 +159,36 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
          
          <div className="relative z-10 p-8 flex flex-col items-center text-center">
             
-            {/* Logo with Upload */}
-            <div className="relative group/logo">
-                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-neon via-white to-black mb-6 shadow-neon relative cursor-pointer" onClick={() => isOwner && fileInputRef.current?.click()}>
+            {/* Logo Logic (URL Input) */}
+            <div className="relative group/logo mb-6">
+                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-neon via-white to-black shadow-neon relative">
                     <div className="absolute inset-0 bg-neon rounded-full blur-md opacity-50"></div>
                     <img src={localTeam.logoUrl} alt={team.name} className="relative w-full h-full rounded-full object-cover border-4 border-black bg-black" />
                     
-                    {isOwner && (
-                        <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity">
-                            <span className="text-2xl">📷</span>
-                        </div>
+                    {isOwner && !isEditingLogo && (
+                        <button 
+                            onClick={() => setIsEditingLogo(true)}
+                            className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity cursor-pointer"
+                        >
+                            <span className="text-2xl">🔗</span>
+                        </button>
                     )}
                 </div>
-                <input type="file" ref={fileInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
+
+                {isEditingLogo && (
+                    <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-64 bg-black border border-white/20 p-2 rounded-xl z-50 flex gap-2 animate-scaleIn">
+                        <input 
+                            type="text" 
+                            value={logoUrlInput}
+                            onChange={(e) => setLogoUrlInput(e.target.value)}
+                            className="w-full bg-pitch-900 text-xs text-white p-2 rounded border border-pitch-700 focus:border-neon focus:outline-none"
+                            placeholder="https://..."
+                            autoFocus
+                        />
+                        <button onClick={handleSaveLogo} className="bg-neon text-black text-xs font-bold px-2 rounded hover:bg-white">OK</button>
+                        <button onClick={() => setIsEditingLogo(false)} className="bg-red-500 text-white text-xs font-bold px-2 rounded">X</button>
+                    </div>
+                )}
             </div>
             
             {/* Editable Name */}

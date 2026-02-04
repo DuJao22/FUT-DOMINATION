@@ -53,6 +53,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
   const [opponentName, setOpponentName] = useState('');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
+  const [proofUrl, setProofUrl] = useState(''); // Changed from file to URL
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,9 +190,15 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                     </div>
 
                     <div>
-                        <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Prova do Jogo</label>
-                        <input type="file" className="block w-full text-sm text-pitch-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-pitch-800 file:text-neon hover:file:bg-pitch-700 cursor-pointer"/>
-                        <p className="text-[10px] text-pitch-500 mt-1">Envie uma foto do placar ou dos times.</p>
+                        <label className="block text-pitch-300 text-xs font-bold mb-1 uppercase">Prova do Jogo (Link)</label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white text-sm focus:border-neon focus:outline-none placeholder-gray-600"
+                            placeholder="https://imgur.com/..."
+                            value={proofUrl}
+                            onChange={(e) => setProofUrl(e.target.value)}
+                        />
+                        <p className="text-[10px] text-pitch-500 mt-1">Cole o link da foto do placar (Ex: Google Photos, Imgur).</p>
                     </div>
                 </form>
             )}

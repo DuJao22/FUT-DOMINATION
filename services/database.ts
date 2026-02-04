@@ -107,15 +107,28 @@ class DatabaseService {
       }
 
       // MIGRATION: Attempt to add columns if they don't exist (for existing tables)
+      // FIX: Check PRAGMA first to avoid "duplicate column" errors in logs
       try {
-          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN onboarding_completed INTEGER DEFAULT 0`);
-      } catch (e) { /* Ignore if exists */ }
-      try {
-          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN position TEXT`);
-      } catch (e) { /* Ignore if exists */ }
-      try {
-          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN shirt_number INTEGER`);
-      } catch (e) { /* Ignore if exists */ }
+          const columns = await this.query(`PRAGMA table_info(${TABLES.USERS})`);
+          if (Array.isArray(columns)) {
+              const existingColumns = new Set(columns.map((c: any) => c.name));
+
+              if (!existingColumns.has('onboarding_completed')) {
+                  console.log("Migrating: Adding onboarding_completed column...");
+                  await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN onboarding_completed INTEGER DEFAULT 0`);
+              }
+              if (!existingColumns.has('position')) {
+                  console.log("Migrating: Adding position column...");
+                  await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN position TEXT`);
+              }
+              if (!existingColumns.has('shirt_number')) {
+                  console.log("Migrating: Adding shirt_number column...");
+                  await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN shirt_number INTEGER`);
+              }
+          }
+      } catch (e) { 
+          console.warn("⚠️ Migration logic warning:", e); 
+      }
 
       console.log("✅ Schema Verified.");
   }

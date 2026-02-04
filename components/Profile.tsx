@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { User, Match, UserRole } from '../types';
-import { MOCK_TEAMS } from '../constants';
 import { dbService } from '../services/database';
 
 interface ProfileProps {
@@ -11,10 +10,6 @@ interface ProfileProps {
 }
 
 export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, onLogout }) => {
-  const [newTeamName, setNewTeamName] = useState('');
-  const [createError, setCreateError] = useState('');
-  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
-
   // Edit Profile State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -50,81 +45,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
       } finally {
           setIsSavingProfile(false);
       }
-  };
-
-  // --- Team Logic ---
-  const handleCreateTeam = async () => {
-    setCreateError('');
-    
-    if (!newTeamName.trim()) {
-        setCreateError('O nome do time não pode estar vazio.');
-        return;
-    }
-
-    if (newTeamName.length < 3) {
-        setCreateError('O nome deve ter pelo menos 3 caracteres.');
-        return;
-    }
-
-    // UNIQUE CHECK (Using Local Mock + DB Check ideally, but assuming Mock list is updated for now or relying on DB constraint catch)
-    const nameExists = MOCK_TEAMS.some(t => t.name.toLowerCase() === newTeamName.trim().toLowerCase());
-    if (nameExists) {
-        setCreateError('Este nome de time já existe. Escolha outro.');
-        return;
-    }
-
-    setIsCreatingTeam(true);
-
-    try {
-        const newTeamId = `t-${Date.now()}`;
-        
-        // 1. Create New Team Object
-        const newTeam = {
-            id: newTeamId,
-            name: newTeamName.trim(),
-            logoUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(newTeamName)}&background=random&length=2`,
-            wins: 0,
-            losses: 0,
-            draws: 0,
-            territoryColor: '#ffffff', // User can change later
-            players: [user], // Owner is first player
-            ownerId: user.id,
-            category: 'Society' as const, // Default
-            homeTurf: 'Sem Local'
-        };
-
-        // 2. Save to Real Database
-        const teamCreated = await dbService.createTeam(newTeam);
-        
-        if (!teamCreated) {
-            throw new Error("Falha ao criar time no banco de dados.");
-        }
-
-        // 3. Update User Role in Real Database
-        const userUpdated = await dbService.updateUserTeamAndRole(user.id, newTeamId, UserRole.OWNER);
-
-        if (!userUpdated) {
-             throw new Error("Time criado, mas falha ao atualizar usuário.");
-        }
-
-        // 4. Update Local State (Mocks for instant UI feedback + Global App State)
-        // @ts-ignore
-        MOCK_TEAMS.push(newTeam); // Keep mock sync for now until full DB fetch is implemented in App.tsx
-
-        const updatedUser = { ...user, role: UserRole.OWNER, teamId: newTeamId };
-        if (onUpdateUser) {
-            onUpdateUser(updatedUser);
-        }
-
-        setIsCreatingTeam(false);
-        setNewTeamName('');
-        alert(`Parabéns! Você fundou o ${newTeamName}. Agora você é um Dono de Time.`);
-
-    } catch (error) {
-        console.error(error);
-        setCreateError("Erro ao criar time. Tente novamente.");
-        setIsCreatingTeam(false);
-    }
   };
 
   return (
@@ -205,40 +125,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
                   </div>
               </div>
           </div>
-      )}
-
-      {/* --- SECTION: UPGRADE TO OWNER (Visible only to Fans/Players) --- */}
-      {user.role !== UserRole.OWNER && (
-         <div className="bg-gradient-to-r from-indigo-900 to-pitch-900 rounded-[2rem] p-8 border border-neon/30 shadow-[0_0_30px_rgba(57,255,20,0.1)] relative overflow-hidden animate-[fadeIn_0.5s]">
-            <div className="absolute top-0 right-0 p-8 opacity-10 text-9xl">👑</div>
-            <div className="relative z-10">
-                <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide mb-2">Modo Carreira</h2>
-                <p className="text-gray-300 mb-6 max-w-md">Você está assistindo da arquibancada. Quer entrar em campo e dominar seu bairro? Funde seu próprio time hoje.</p>
-                
-                <div className="bg-black/40 p-6 rounded-2xl border border-white/10 max-w-md">
-                    <label className="block text-neon text-xs font-bold mb-2 uppercase">Nome do Seu Novo Time</label>
-                    <div className="flex flex-col gap-3">
-                        <input 
-                            type="text" 
-                            value={newTeamName}
-                            onChange={(e) => setNewTeamName(e.target.value)}
-                            className="bg-pitch-950 border border-pitch-600 rounded-lg px-4 py-3 text-white focus:border-neon focus:outline-none placeholder-gray-600 w-full"
-                            placeholder="Ex: Real Osasco FC"
-                        />
-                        <button 
-                            onClick={handleCreateTeam}
-                            disabled={isCreatingTeam}
-                            className="bg-neon text-pitch-950 font-bold py-3 rounded-lg shadow-neon hover:bg-white transition-colors uppercase tracking-wider"
-                        >
-                            {isCreatingTeam ? 'Fundando Clube...' : 'Fundar Clube Agora'}
-                        </button>
-                    </div>
-                    {createError && (
-                        <p className="text-red-400 text-sm mt-3 font-bold bg-red-900/20 p-2 rounded text-center border border-red-500/30">{createError}</p>
-                    )}
-                </div>
-            </div>
-         </div>
       )}
 
       {/* Player Card (Premium Holo Effect) */}

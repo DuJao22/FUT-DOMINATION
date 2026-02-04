@@ -191,7 +191,8 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      <main className="md:ml-64 w-full min-h-screen relative pb-28 md:pb-8">
+      {/* Main Content Area - md:ml-64 ensures space for fixed sidebar on desktop */}
+      <main className="md:ml-64 w-full min-h-screen relative pb-28 md:pb-8 transition-all duration-300">
         {currentTab !== 'map' && (
           <header className="px-6 pt-12 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
@@ -212,7 +213,7 @@ const App: React.FC = () => {
         <div className="px-4 md:px-8 max-w-7xl mx-auto h-full mt-4">
           
           {currentTab === 'map' && (
-             <div className="h-screen w-full absolute top-0 left-0 pt-0 md:pt-8 md:relative md:h-auto">
+             <div className="h-screen w-full absolute top-0 left-0 pt-0 md:pt-0 md:relative md:h-auto">
                  <div className="absolute top-12 left-6 z-10 md:hidden pointer-events-none">
                     <h1 className="text-4xl font-display font-bold text-white drop-shadow-md tracking-wider">DOMINATION</h1>
                  </div>

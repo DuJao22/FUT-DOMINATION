@@ -22,6 +22,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
   // Owner
   const [teamName, setTeamName] = useState('');
   const [teamCategory, setTeamCategory] = useState('Adulto/Livre');
+  const [teamLogoUrl, setTeamLogoUrl] = useState('');
   
   // Player
   const [position, setPosition] = useState('MID');
@@ -43,7 +44,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
           name: teamName,
           category: teamCategory,
           homeTurf: location, // Default to user location for simplicity
-          logoUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random` // Placeholder
+          logoUrl: teamLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random` // Default if empty
       } : undefined;
 
       const result = await dbService.completeOnboarding(user.id, selectedRole, profileData, teamData);
@@ -194,6 +195,18 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                       className="w-full bg-black/50 border border-neon/50 rounded-xl p-4 text-white focus:border-neon focus:outline-none placeholder-gray-600"
                                       placeholder="Ex: Real Osasco FC"
                                   />
+                              </div>
+
+                              <div>
+                                  <label className="block text-gray-400 text-xs font-bold mb-1 uppercase">URL do Escudo/Logo (Opcional)</label>
+                                  <input 
+                                      type="text" 
+                                      value={teamLogoUrl}
+                                      onChange={e => setTeamLogoUrl(e.target.value)}
+                                      className="w-full bg-black/50 border border-neon/50 rounded-xl p-4 text-white focus:border-neon focus:outline-none placeholder-gray-600 text-sm"
+                                      placeholder="https://..."
+                                  />
+                                  <p className="text-[10px] text-gray-500 mt-1">Cole o link da imagem. Se vazio, geraremos um automático.</p>
                               </div>
 
                               <div>
