@@ -8,6 +8,7 @@ import { Onboarding } from './components/Onboarding';
 import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { MatchCalendar } from './components/MatchCalendar';
+import { PickupSoccer } from './components/PickupSoccer'; // NEW
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
 import { TransferMarket } from './components/TransferMarket';
@@ -199,6 +200,7 @@ const App: React.FC = () => {
               <h1 className="text-4xl md:text-5xl font-display font-bold text-white uppercase italic tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
                 {currentTab === 'calendar' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Match Center</span>}
+                {currentTab === 'pickup' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500">Pelada Local</span>}
                 {currentTab === 'studio' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Estúdio Criativo</span>}
                 {currentTab === 'team' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Meu Elenco</span>}
                 {currentTab === 'market' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">Mercado</span>}
@@ -269,6 +271,7 @@ const App: React.FC = () => {
           )}
 
           <div className="animate-[fadeIn_0.5s_ease-out]">
+            {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} />}
             {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} />}
             {currentTab === 'studio' && <GenAIStudio />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}

@@ -15,7 +15,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
     { id: 'map', label: 'Mapa', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
     )},
-    { id: 'calendar', label: 'Jogos', icon: (active: boolean) => (
+    { id: 'pickup', label: 'Peladas', icon: (active: boolean) => (
+       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+    )},
+    { id: 'calendar', label: 'Jogos Oficiais', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
     )},
     { id: 'market', label: 'Mercado', icon: (active: boolean) => (
@@ -44,7 +47,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
             <p className="text-xs text-gray-500 tracking-widest mt-1 uppercase">Domine o Território</p>
         </div>
         
-        <div className="flex flex-col gap-2 flex-1">
+        <div className="flex flex-col gap-2 flex-1 overflow-y-auto no-scrollbar">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -75,7 +78,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
 
         <button 
             onClick={onLogout} 
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors mt-auto group"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors mt-auto group flex-shrink-0"
         >
             <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span className="text-sm font-bold uppercase">Sair</span>

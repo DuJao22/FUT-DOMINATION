@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   OWNER = 'OWNER',
   PLAYER = 'PLAYER', // Usually assigned by Owner
@@ -110,6 +111,21 @@ export interface Match {
   goals?: MatchGoal[];
 }
 
+export interface PickupGame {
+  id: string;
+  hostId: string;
+  hostName: string;
+  title: string; // Ex: "Fut de Terça"
+  description: string;
+  date: Date;
+  locationName: string;
+  lat: number;
+  lng: number;
+  maxPlayers: number;
+  price?: number; // Optional cost
+  confirmedPlayers: string[]; // Array of User IDs
+}
+
 export interface Comment {
   id: string;
   authorName: string;
@@ -139,7 +155,7 @@ export interface Post {
 export type ImageResolution = '1K' | '2K' | '4K';
 
 // --- NEW NOTIFICATION TYPES ---
-export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE';
+export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE' | 'PICKUP_JOIN';
 
 export interface Notification {
   id: string;

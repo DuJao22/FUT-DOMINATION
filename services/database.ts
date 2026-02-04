@@ -1,5 +1,5 @@
 import { Database } from '@sqlitecloud/drivers';
-import { Team, Territory, Post, User, Match, UserRole, Notification, NotificationType, Court, MatchStatus } from '../types';
+import { Team, Territory, Post, User, Match, UserRole, Notification, NotificationType, Court, MatchStatus, PickupGame } from '../types';
 
 // Fallback Hardcoded String - Updated to match user provided string exactly
 const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:8860/FUT_DOM.db?apikey=CCfQtOyo5qbyni96cUwEdIG4q2MRcEXpRHGoNpELtNc";
@@ -14,7 +14,9 @@ const TABLES = {
     MATCHES: 'app_matches_v2',
     TERRITORIES: 'app_territories_v2',
     NOTIFICATIONS: 'app_notifications_v2',
-    COURTS: 'app_courts_v2'
+    COURTS: 'app_courts_v2',
+    PICKUP_GAMES: 'app_pickup_games_v1',
+    PICKUP_ATTENDANCE: 'app_pickup_attendance_v1'
 };
 
 class DatabaseService {
@@ -122,6 +124,27 @@ class DatabaseService {
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             action_data TEXT
           )`,
+          // PICKUP GAMES TABLES
+          `CREATE TABLE IF NOT EXISTS ${TABLES.PICKUP_GAMES} (
+            id TEXT PRIMARY KEY,
+            host_id TEXT NOT NULL,
+            host_name TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            date TEXT NOT NULL,
+            location_name TEXT NOT NULL,
+            lat REAL NOT NULL,
+            lng REAL NOT NULL,
+            max_players INTEGER DEFAULT 14,
+            price REAL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS ${TABLES.PICKUP_ATTENDANCE} (
+            game_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (game_id, user_id)
+          )`,
           // Initialize default territories
           `INSERT OR IGNORE INTO ${TABLES.TERRITORIES} (id, name, lat, lng, points) VALUES 
            ('area1', 'Arena Central', 40.7128, -74.0060, 500),
@@ -139,65 +162,6 @@ class DatabaseService {
           }
       }
       
-      // Migration: Add new columns safely
-      try {
-          const tableInfo = await this.query(`PRAGMA table_info(${TABLES.TEAMS})`);
-          if (Array.isArray(tableInfo)) {
-              const existingColumns = tableInfo.map((col: any) => col.name);
-              
-              if (!existingColumns.includes('city')) {
-                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN city TEXT`);
-                  console.log("✅ Migrated: Added 'city' to teams");
-              }
-              if (!existingColumns.includes('state')) {
-                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN state TEXT`);
-                  console.log("✅ Migrated: Added 'state' to teams");
-              }
-              if (!existingColumns.includes('neighborhood')) {
-                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN neighborhood TEXT`);
-                  console.log("✅ Migrated: Added 'neighborhood' to teams");
-              }
-          }
-          
-          // User Migrations
-          const userInfo = await this.query(`PRAGMA table_info(${TABLES.USERS})`);
-          if (Array.isArray(userInfo)) {
-              const existingColumns = userInfo.map((col: any) => col.name);
-              if (!existingColumns.includes('is_starter')) {
-                  await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN is_starter INTEGER DEFAULT 0`);
-                  console.log("✅ Migrated: Added 'is_starter' to users");
-              }
-          }
-
-          // Match Migrations
-          const matchTableInfo = await this.query(`PRAGMA table_info(${TABLES.MATCHES})`);
-          if (Array.isArray(matchTableInfo)) {
-              const existingColumns = matchTableInfo.map((col: any) => col.name);
-              
-              if (!existingColumns.includes('court_id')) {
-                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN court_id TEXT`);
-                  console.log("✅ Migrated: Added 'court_id' to matches");
-              }
-              
-              if (!existingColumns.includes('away_team_id')) {
-                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN away_team_id TEXT`);
-                  console.log("✅ Migrated: Added 'away_team_id' to matches");
-              }
-
-              if (!existingColumns.includes('status')) {
-                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN status TEXT DEFAULT 'FINISHED'`);
-                  console.log("✅ Migrated: Added 'status' to matches");
-              }
-              if (!existingColumns.includes('stats_json')) {
-                  await this.query(`ALTER TABLE ${TABLES.MATCHES} ADD COLUMN stats_json TEXT`);
-                  console.log("✅ Migrated: Added 'stats_json' to matches");
-              }
-          }
-
-      } catch (e) {
-        console.warn("⚠️ Schema migration check skipped or failed:", e);
-      }
-
       console.log("✅ Schema Verified.");
   }
 
@@ -309,6 +273,23 @@ class DatabaseService {
           read: Boolean(row.is_read),
           timestamp: new Date(row.timestamp),
           actionData: row.action_data ? JSON.parse(row.action_data) : undefined
+      }
+  }
+  
+  private mapPickupGame(row: any, attendees: string[] = []): PickupGame {
+      return {
+          id: row.id,
+          hostId: row.host_id,
+          hostName: row.host_name,
+          title: row.title,
+          description: row.description,
+          date: new Date(row.date),
+          locationName: row.location_name,
+          lat: row.lat,
+          lng: row.lng,
+          maxPlayers: row.max_players,
+          price: row.price,
+          confirmedPlayers: attendees
       }
   }
 
@@ -790,6 +771,89 @@ class DatabaseService {
     } catch (e) {
         return [];
     }
+  }
+
+  // --- PICKUP GAME (PELADAS) METHODS ---
+
+  async createPickupGame(game: PickupGame): Promise<boolean> {
+      try {
+          await this.query(
+              `INSERT INTO ${TABLES.PICKUP_GAMES} (id, host_id, host_name, title, description, date, location_name, lat, lng, max_players, price)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [game.id, game.hostId, game.hostName, game.title, game.description, game.date.toISOString(), game.locationName, game.lat, game.lng, game.maxPlayers, game.price || 0]
+          );
+          // Host automatically joins
+          await this.joinPickupGame(game.id, game.hostId, game.date);
+          return true;
+      } catch (e) {
+          console.error("Create Pickup Game Failed", e);
+          return false;
+      }
+  }
+
+  async getPickupGames(): Promise<PickupGame[]> {
+      try {
+          const gamesRows = await this.query(`SELECT * FROM ${TABLES.PICKUP_GAMES} WHERE date >= date('now') ORDER BY date ASC`);
+          const games: PickupGame[] = [];
+          
+          if(Array.isArray(gamesRows)) {
+              for(const row of gamesRows) {
+                  // Get attendance
+                  const attRows = await this.query(`SELECT user_id FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ?`, [row.id]);
+                  const attendees = Array.isArray(attRows) ? attRows.map((a:any) => a.user_id) : [];
+                  games.push(this.mapPickupGame(row, attendees));
+              }
+          }
+          return games;
+      } catch (e) {
+          console.error("Get Pickup Games Failed", e);
+          return [];
+      }
+  }
+
+  // IMPORTANT: Limit to 2 games per day
+  async joinPickupGame(gameId: string, userId: string, gameDate: Date): Promise<{success: boolean, message: string}> {
+      try {
+          // 1. Check if already joined
+          const existing = await this.query(`SELECT * FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id = ?`, [gameId, userId]);
+          if(Array.isArray(existing) && existing.length > 0) {
+              return { success: false, message: "Você já está confirmado nesta pelada." };
+          }
+
+          // 2. Check Daily Limit (Max 2)
+          // Convert JS Date to SQL formatted date string 'YYYY-MM-DD' for comparison
+          const dateStr = gameDate.toISOString().split('T')[0];
+          
+          const dailyCountRes = await this.query(
+              `SELECT count(*) as count FROM ${TABLES.PICKUP_ATTENDANCE} a
+               JOIN ${TABLES.PICKUP_GAMES} g ON a.game_id = g.id
+               WHERE a.user_id = ? AND date(g.date) = ?`,
+              [userId, dateStr]
+          );
+          
+          const dailyCount = (dailyCountRes as any[])[0]?.count || 0;
+
+          if (dailyCount >= 2) {
+              return { success: false, message: "Limite atingido! Você só pode marcar 2 peladas por dia." };
+          }
+
+          // 3. Join
+          await this.query(`INSERT INTO ${TABLES.PICKUP_ATTENDANCE} (game_id, user_id) VALUES (?, ?)`, [gameId, userId]);
+          return { success: true, message: "Presença confirmada!" };
+
+      } catch (e) {
+          console.error("Join Pickup Failed", e);
+          return { success: false, message: "Erro ao confirmar presença." };
+      }
+  }
+
+  async leavePickupGame(gameId: string, userId: string): Promise<boolean> {
+      try {
+          await this.query(`DELETE FROM ${TABLES.PICKUP_ATTENDANCE} WHERE game_id = ? AND user_id = ?`, [gameId, userId]);
+          return true;
+      } catch (e) {
+          return false;
+      }
   }
 }
 
