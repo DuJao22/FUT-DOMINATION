@@ -18,19 +18,49 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
   
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
-  // Role Specifics
-  // Owner
+  // Role Specifics - Team Address
   const [teamName, setTeamName] = useState('');
   const [teamCategory, setTeamCategory] = useState('Adulto/Livre');
   const [teamLogoUrl, setTeamLogoUrl] = useState('');
+  
+  // Structured Address State (Mandatory for Ranking)
+  const [cep, setCep] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
   
   // Player
   const [position, setPosition] = useState('MID');
   const [shirtNumber, setShirtNumber] = useState('');
 
   // --- HANDLERS ---
+  
+  const handleCepBlur = async () => {
+      const rawCep = cep.replace(/\D/g, '');
+      if (rawCep.length === 8) {
+          setIsLoadingCep(true);
+          try {
+              const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
+              const data = await response.json();
+              if (!data.erro) {
+                  setCity(data.localidade);
+                  setState(data.uf);
+                  setNeighborhood(data.bairro);
+                  setLocation(`${data.localidade} - ${data.uf}`); // Friendly display name
+              } else {
+                  alert("CEP não encontrado.");
+              }
+          } catch (e) {
+              console.error("Erro ao buscar CEP", e);
+          } finally {
+              setIsLoadingCep(false);
+          }
+      }
+  };
+
   const handleNextStep = () => {
-      if (step === 1 && name && location) setStep(2);
+      if (step === 1 && name) setStep(2);
       else if (step === 2 && selectedRole) setStep(3);
   };
 
@@ -43,8 +73,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
       const teamData = selectedRole === UserRole.OWNER ? {
           name: teamName,
           category: teamCategory,
-          homeTurf: location, // Default to user location for simplicity
-          logoUrl: teamLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random` // Default if empty
+          homeTurf: `${neighborhood}, ${city}`, // Base display string
+          city: city, // Strict Ranking Filter
+          state: state, // Strict Ranking Filter
+          neighborhood: neighborhood, // Strict Ranking Filter
+          logoUrl: teamLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random`
       } : undefined;
 
       const result = await dbService.completeOnboarding(user.id, selectedRole, profileData, teamData);
@@ -97,20 +130,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                           />
                       </div>
 
-                      <div>
-                          <label className="block text-neon text-xs font-bold mb-1 uppercase">Sua Base (Cidade/Bairro)</label>
-                          <input 
-                             type="text" 
-                             value={location}
-                             onChange={e => setLocation(e.target.value)}
-                             className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-neon focus:outline-none"
-                             placeholder="Ex: Osasco, SP"
-                          />
-                      </div>
-
                       <button 
                          onClick={handleNextStep}
-                         disabled={!name || !location}
+                         disabled={!name}
                          className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
                       >
                           Próximo
@@ -183,7 +205,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                           <>
                               <div className="text-center">
                                   <h2 className="text-2xl font-display font-bold text-neon uppercase italic">Fundar Clube</h2>
-                                  <p className="text-gray-400 text-xs mt-1">O primeiro passo para a dominação.</p>
+                                  <p className="text-gray-400 text-xs mt-1">Preencha com atenção. A localização definirá seus rankings.</p>
                               </div>
                               
                               <div>
@@ -197,16 +219,46 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                   />
                               </div>
 
-                              <div>
-                                  <label className="block text-gray-400 text-xs font-bold mb-1 uppercase">URL do Escudo/Logo (Opcional)</label>
-                                  <input 
-                                      type="text" 
-                                      value={teamLogoUrl}
-                                      onChange={e => setTeamLogoUrl(e.target.value)}
-                                      className="w-full bg-black/50 border border-neon/50 rounded-xl p-4 text-white focus:border-neon focus:outline-none placeholder-gray-600 text-sm"
-                                      placeholder="https://..."
-                                  />
-                                  <p className="text-[10px] text-gray-500 mt-1">Cole o link da imagem. Se vazio, geraremos um automático.</p>
+                              {/* ADDRESS / CEP FIELD */}
+                              <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                                  <h4 className="text-neon text-xs font-bold uppercase mb-3 flex items-center gap-2">
+                                      <span>📍</span> Localização da Base
+                                  </h4>
+                                  
+                                  <div className="mb-3">
+                                      <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1">CEP (Obrigatório)</label>
+                                      <div className="relative">
+                                          <input 
+                                              type="text"
+                                              value={cep}
+                                              onChange={e => {
+                                                  const val = e.target.value.replace(/\D/g, '');
+                                                  const formatted = val.length > 5 ? `${val.slice(0,5)}-${val.slice(5,8)}` : val;
+                                                  setCep(formatted);
+                                              }}
+                                              onBlur={handleCepBlur}
+                                              maxLength={9}
+                                              className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+                                              placeholder="00000-000"
+                                          />
+                                          {isLoadingCep && <div className="absolute right-3 top-3 w-4 h-4 border-2 border-neon border-t-transparent rounded-full animate-spin"></div>}
+                                      </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                          <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1">Cidade</label>
+                                          <input type="text" value={city} readOnly className="w-full bg-black/30 border border-white/5 rounded-lg p-2 text-gray-300 cursor-not-allowed" />
+                                      </div>
+                                      <div>
+                                          <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1">Estado</label>
+                                          <input type="text" value={state} readOnly className="w-full bg-black/30 border border-white/5 rounded-lg p-2 text-gray-300 cursor-not-allowed" />
+                                      </div>
+                                  </div>
+                                  <div className="mt-2">
+                                      <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1">Bairro</label>
+                                      <input type="text" value={neighborhood} readOnly className="w-full bg-black/30 border border-white/5 rounded-lg p-2 text-gray-300 cursor-not-allowed" />
+                                  </div>
                               </div>
 
                               <div>
@@ -271,13 +323,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                           <div className="text-center py-8">
                               <span className="text-6xl mb-4 block">🎉</span>
                               <h3 className="text-xl font-bold text-white mb-2">Tudo Pronto!</h3>
-                              <p className="text-gray-400">Você está pronto para explorar os campos e torcer pelos times de {location}.</p>
+                              <p className="text-gray-400">Você está pronto para explorar os campos e torcer.</p>
                           </div>
                       )}
 
                       <button 
                          onClick={handleFinish}
-                         disabled={loading || (selectedRole === UserRole.OWNER && !teamName) || (selectedRole === UserRole.PLAYER && !shirtNumber)}
+                         disabled={loading || (selectedRole === UserRole.OWNER && (!teamName || !city)) || (selectedRole === UserRole.PLAYER && !shirtNumber)}
                          className="w-full bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] transition-transform shadow-lg shadow-neon/20 mt-8 flex justify-center items-center gap-2"
                       >
                           {loading ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div> : 'Entrar em Campo 🚀'}

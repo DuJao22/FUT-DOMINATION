@@ -71,7 +71,10 @@ class DatabaseService {
             territory_color TEXT,
             owner_id TEXT,
             category TEXT,
-            home_turf TEXT
+            home_turf TEXT,
+            city TEXT,
+            state TEXT,
+            neighborhood TEXT
           )`,
           `CREATE TABLE IF NOT EXISTS ${TABLES.COURTS} (
             id TEXT PRIMARY KEY,
@@ -132,6 +135,16 @@ class DatabaseService {
               console.log("⚠️ Schema info:", e);
           }
       }
+      
+      // Attempt to add new columns to existing teams table if they don't exist
+      try {
+        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN city TEXT`);
+        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN state TEXT`);
+        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN neighborhood TEXT`);
+      } catch (e) {
+        // Ignore error if columns exist
+      }
+
       console.log("✅ Schema Verified.");
   }
 
@@ -198,6 +211,9 @@ class DatabaseService {
       ownerId: row.owner_id,
       category: row.category,
       homeTurf: row.home_turf,
+      city: row.city,
+      state: row.state,
+      neighborhood: row.neighborhood,
       players: []
     };
   }
@@ -319,7 +335,7 @@ class DatabaseService {
       userId: string, 
       role: UserRole, 
       profileData: { name: string; location: string; position?: string; shirtNumber?: number; avatarUrl?: string; },
-      teamData?: { name: string; homeTurf: string; category: string; logoUrl: string; }
+      teamData?: { name: string; homeTurf: string; category: string; logoUrl: string; city: string; state: string; neighborhood: string; }
   ): Promise<{ success: boolean; user?: User; team?: Team }> {
       try {
           await this.query(
@@ -341,7 +357,10 @@ class DatabaseService {
                   players: [],
                   ownerId: userId,
                   category: teamData.category as any,
-                  homeTurf: teamData.homeTurf
+                  homeTurf: teamData.homeTurf,
+                  city: teamData.city,
+                  state: teamData.state,
+                  neighborhood: teamData.neighborhood
               };
 
               await this.createTeam(newTeam);
@@ -362,9 +381,9 @@ class DatabaseService {
   async createTeam(team: Team): Promise<boolean> {
       try {
           await this.query(
-              `INSERT INTO ${TABLES.TEAMS} (id, name, logo_url, wins, losses, draws, territory_color, owner_id, category, home_turf)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [team.id, team.name, team.logoUrl, team.wins, team.losses, team.draws, team.territoryColor, team.ownerId, team.category, team.homeTurf]
+              `INSERT INTO ${TABLES.TEAMS} (id, name, logo_url, wins, losses, draws, territory_color, owner_id, category, home_turf, city, state, neighborhood)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [team.id, team.name, team.logoUrl, team.wins, team.losses, team.draws, team.territoryColor, team.ownerId, team.category, team.homeTurf, team.city, team.state, team.neighborhood]
           );
           return true;
       } catch (e) {

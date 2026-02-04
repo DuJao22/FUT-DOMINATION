@@ -52,7 +52,12 @@ export interface Team {
   players: User[];
   ownerId: string;
   category: TeamCategory;
-  homeTurf?: string; // Bairro Base
+  homeTurf?: string; // Nome amigável (ex: Base Osasco)
+  
+  // Structured Location Data for Rankings
+  city?: string;
+  state?: string;
+  neighborhood?: string;
 }
 
 export interface Territory {
