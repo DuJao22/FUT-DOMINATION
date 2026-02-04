@@ -96,6 +96,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
       {/* MOBILE HAMBURGER BUTTON (Visible only on mobile) */}
       <div className="md:hidden fixed top-5 left-5 z-[100] transition-opacity duration-300">
          <button 
+            id="mobile-menu-btn"
             onClick={() => setIsMobileMenuOpen(true)}
             className="bg-black/60 backdrop-blur-md p-3 rounded-full border border-white/20 text-white shadow-lg active:scale-95 transition-all"
          >

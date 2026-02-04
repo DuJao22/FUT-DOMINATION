@@ -123,7 +123,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams }
       </MapContainer>
 
       {/* OVERLAY: Status Badge (Centered for Mobile) */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
+      <div id="map-status-badge" className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
           <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-neon/30 flex items-center gap-2.5 shadow-lg animate-fadeIn">
              <div className="relative">
                  <div className="w-2 h-2 bg-neon rounded-full animate-none"></div>

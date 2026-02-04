@@ -8,11 +8,12 @@ import { Onboarding } from './components/Onboarding';
 import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { MatchCalendar } from './components/MatchCalendar';
-import { PickupSoccer } from './components/PickupSoccer'; // NEW
+import { PickupSoccer } from './components/PickupSoccer'; 
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
 import { TransferMarket } from './components/TransferMarket';
 import { NotificationsModal } from './components/NotificationsModal';
+import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay'; // NEW
 import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory } from './types';
 import { dbService } from './services/database';
@@ -26,6 +27,9 @@ const App: React.FC = () => {
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+
+  // --- TUTORIAL STATE ---
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // --- APP STATE (FROM DB) ---
   const [teams, setTeams] = useState<Team[]>([]);
@@ -61,6 +65,8 @@ const App: React.FC = () => {
                     if (user.role === UserRole.OWNER && user.onboardingCompleted) {
                         setCurrentTab('team');
                     }
+                    // Check Tutorial
+                    checkTutorialStatus();
                 } else {
                     localStorage.removeItem('fut_dom_user_id');
                 }
@@ -75,6 +81,19 @@ const App: React.FC = () => {
 
     initApp();
   }, []);
+
+  const checkTutorialStatus = () => {
+      const seen = localStorage.getItem('fut_dom_tutorial_seen');
+      if (!seen) {
+          // Pequeno delay para garantir que a UI carregou
+          setTimeout(() => setShowTutorial(true), 1500);
+      }
+  };
+
+  const handleTutorialComplete = () => {
+      localStorage.setItem('fut_dom_tutorial_seen', 'true');
+      setShowTutorial(false);
+  };
 
   const checkNotifications = async (userId: string) => {
       const notifs = await dbService.getNotifications(userId);
@@ -109,6 +128,7 @@ const App: React.FC = () => {
     } else {
       setCurrentTab('map');
     }
+    checkTutorialStatus();
   };
 
   const handleLogout = () => {
@@ -131,7 +151,42 @@ const App: React.FC = () => {
       } else {
           setCurrentTab('map');
       }
+      checkTutorialStatus();
   };
+
+  // --- TUTORIAL STEPS DEFINITION ---
+  const tutorialSteps: TutorialStep[] = [
+      {
+          targetId: 'welcome-center', 
+          title: 'Bem-vindo ao Domination',
+          content: 'Aqui começa sua jornada para conquistar o território. Vamos fazer um tour rápido?',
+          position: 'center'
+      },
+      {
+          targetId: 'mobile-menu-btn',
+          title: 'Menu Principal',
+          content: 'Acesse Peladas, Mercado, Rankings e gerencie seu Time por aqui.',
+          position: 'bottom' // Ajusta automaticamente se desktop/mobile
+      },
+      {
+          targetId: 'map-status-badge',
+          title: 'Mapa de Territórios',
+          content: 'Veja em tempo real quem domina cada bairro. Toque nos escudos para desafiar!',
+          position: 'bottom'
+      },
+      {
+          targetId: 'header-notifs-btn',
+          title: 'Central de Avisos',
+          content: 'Convites para jogos, pedidos de transferência e alertas aparecem aqui.',
+          position: 'left'
+      },
+      {
+          targetId: 'header-profile-btn',
+          title: 'Seu Perfil',
+          content: 'Personalize seu card de jogador, veja suas estatísticas e troféus.',
+          position: 'left'
+      }
+  ];
 
   if (isInitializing) {
       return (
@@ -183,6 +238,15 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-pitch-950 bg-mesh bg-fixed font-sans text-gray-100 overflow-x-hidden selection:bg-neon selection:text-black">
       
+      {/* TUTORIAL OVERLAY */}
+      {showTutorial && (
+          <TutorialOverlay 
+              steps={tutorialSteps} 
+              onComplete={handleTutorialComplete} 
+              onSkip={handleTutorialComplete} 
+          />
+      )}
+
       <Navigation 
         currentTab={currentTab} 
         setCurrentTab={setCurrentTab} 
@@ -212,6 +276,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-4">
                 {/* Notification Bell */}
                 <button 
+                  id="header-notifs-btn"
                   onClick={() => setShowNotifications(true)}
                   className="relative p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                 >
@@ -220,7 +285,7 @@ const App: React.FC = () => {
                 </button>
 
                 {/* Profile Pic */}
-                <div className="w-10 h-10 rounded-full border-2 border-neon p-0.5 shadow-neon cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
+                <div id="header-profile-btn" className="w-10 h-10 rounded-full border-2 border-neon p-0.5 shadow-neon cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
                    <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
                 </div>
             </div>
@@ -238,11 +303,11 @@ const App: React.FC = () => {
 
                  {/* Map Header Controls - Fixed to top right */}
                  <div className="fixed top-4 right-4 z-20 md:hidden pointer-events-auto flex gap-2">
-                        <button onClick={() => setShowNotifications(true)} className="p-2.5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 relative shadow-lg active:scale-95 transition-transform">
+                        <button id="header-notifs-btn" onClick={() => setShowNotifications(true)} className="p-2.5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 relative shadow-lg active:scale-95 transition-transform">
                              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                              {hasUnread && <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-black shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>}
                         </button>
-                        <div className="w-11 h-11 rounded-full border-2 border-neon p-0.5 shadow-[0_0_10px_rgba(57,255,20,0.3)] bg-black/40 backdrop-blur cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
+                        <div id="header-profile-btn" className="w-11 h-11 rounded-full border-2 border-neon p-0.5 shadow-[0_0_10px_rgba(57,255,20,0.3)] bg-black/40 backdrop-blur cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
                            <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
                         </div>
                  </div>
