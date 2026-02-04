@@ -82,6 +82,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
   // Form State - New Court
   const [newCourtCoords, setNewCourtCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [courtForm, setCourtForm] = useState({
       name: '',
       address: '',
@@ -125,6 +126,32 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
 
 
   // --- HANDLERS ---
+
+  // Handle CEP auto-fill
+  const handleCepBlur = async () => {
+      const rawCep = courtForm.cep.replace(/\D/g, '');
+      
+      if (rawCep.length === 8) {
+          setIsLoadingCep(true);
+          try {
+              const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
+              const data = await response.json();
+              
+              if (!data.erro) {
+                  setCourtForm(prev => ({
+                      ...prev,
+                      address: `${data.logradouro}, ${data.bairro} - ${data.localidade}/${data.uf}`,
+                  }));
+              } else {
+                  alert("CEP não encontrado.");
+              }
+          } catch (error) {
+              console.error("Erro ao buscar CEP", error);
+          } finally {
+              setIsLoadingCep(false);
+          }
+      }
+  };
 
   const handleRegisterCourt = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -216,7 +243,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
         {/* Header */}
         <div className="p-6 border-b border-pitch-800 flex justify-between items-center bg-pitch-950">
           <h2 className="text-xl font-display font-bold text-white uppercase">
-              {step === 'select_court' && 'Onde foi o jogo?'}
+              {step === 'select_court' && 'Onde vai ser o jogo?'}
               {step === 'register_court' && 'Cadastrar Nova Quadra'}
               {step === 'match_details' && 'Súmula da Partida'}
           </h2>
@@ -303,14 +330,26 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                         <div className="grid grid-cols-2 gap-4">
                              <div>
                                 <label className="block text-pitch-400 text-[10px] font-bold uppercase mb-1">CEP</label>
-                                <input 
-                                    required
-                                    type="text" 
-                                    className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
-                                    placeholder="00000-000"
-                                    value={courtForm.cep}
-                                    onChange={e => setCourtForm({...courtForm, cep: e.target.value})}
-                                />
+                                <div className="relative">
+                                    <input 
+                                        required
+                                        type="text" 
+                                        className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+                                        placeholder="00000-000"
+                                        value={courtForm.cep}
+                                        onChange={e => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            // Format 12345-678
+                                            const formatted = val.length > 5 ? `${val.slice(0,5)}-${val.slice(5,8)}` : val;
+                                            setCourtForm({...courtForm, cep: formatted});
+                                        }}
+                                        onBlur={handleCepBlur}
+                                        maxLength={9}
+                                    />
+                                    {isLoadingCep && (
+                                        <div className="absolute right-3 top-3 w-4 h-4 border-2 border-neon border-t-transparent rounded-full animate-spin"></div>
+                                    )}
+                                </div>
                              </div>
                              <div>
                                 <label className="block text-pitch-400 text-[10px] font-bold uppercase mb-1">Número</label>
@@ -329,10 +368,11 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                             <input 
                                 required
                                 type="text" 
-                                className="w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none"
+                                className={`w-full bg-pitch-950 border border-pitch-700 rounded-lg p-3 text-white focus:border-neon focus:outline-none ${isLoadingCep ? 'opacity-50' : ''}`}
                                 placeholder="Rua das Palmeiras"
                                 value={courtForm.address}
                                 onChange={e => setCourtForm({...courtForm, address: e.target.value})}
+                                readOnly={isLoadingCep}
                             />
                         </div>
                         <div>
