@@ -9,6 +9,7 @@ interface MatchCalendarProps {
 
 export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, currentUser }) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
+  const [scope, setScope] = useState<'all' | 'mine'>('all');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   // Helper to get team logo
@@ -23,13 +24,17 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
   };
 
   const relevantMatches = matches.filter(match => {
-      const myTeamId = currentUser.teamId;
-      if (myTeamId) {
-          return match.homeTeamId === myTeamId || match.awayTeamId === myTeamId;
+      // 1. Filter by Scope (All vs Mine)
+      if (scope === 'mine') {
+          const myTeamId = currentUser.teamId;
+          // Matches where user is player/owner
+          const isMyTeam = myTeamId ? (match.homeTeamId === myTeamId || match.awayTeamId === myTeamId) : false;
+          // Matches user follows
+          const isFollowing = currentUser.following.includes(match.homeTeamId) || (match.awayTeamId && currentUser.following.includes(match.awayTeamId));
+          
+          return isMyTeam || isFollowing;
       }
-      if (currentUser.following.length > 0) {
-          return currentUser.following.includes(match.homeTeamId) || (match.awayTeamId && currentUser.following.includes(match.awayTeamId));
-      }
+      // 'all' returns everything
       return true; 
   });
 
@@ -63,14 +68,20 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
           const myScore = isHome ? match.homeScore || 0 : match.awayScore || 0;
           const oppScore = isHome ? match.awayScore || 0 : match.homeScore || 0;
           
-          if (myScore > oppScore) {
-              resultColor = 'border-green-500/50 bg-green-900/20';
-              resultLabel = 'VITÓRIA';
-          } else if (myScore < oppScore) {
-              resultColor = 'border-red-500/50 bg-red-900/20';
-              resultLabel = 'DERROTA';
-          } else {
-              resultLabel = 'EMPATE';
+          // Only show Win/Loss label if it's explicitly "My Game" context, otherwise just show score for neutrals
+          const myTeamId = currentUser.teamId;
+          const isParticipant = myTeamId && (match.homeTeamId === myTeamId || match.awayTeamId === myTeamId);
+
+          if (isParticipant) {
+              if (myScore > oppScore) {
+                  resultColor = 'border-green-500/50 bg-green-900/20';
+                  resultLabel = 'VITÓRIA';
+              } else if (myScore < oppScore) {
+                  resultColor = 'border-red-500/50 bg-red-900/20';
+                  resultLabel = 'DERROTA';
+              } else {
+                  resultLabel = 'EMPATE';
+              }
           }
       }
 
@@ -79,7 +90,7 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
       const homeName = getTeamName(match.homeTeamId);
 
       return (
-          <div key={match.id} className={`relative flex flex-col md:flex-row items-stretch bg-pitch-900 border rounded-2xl overflow-hidden mb-4 transition-all hover:scale-[1.01] ${!isScheduled && activeTab === 'past' ? resultColor : 'border-white/10 hover:border-neon/30'}`}>
+          <div key={match.id} className={`relative flex flex-col md:flex-row items-stretch bg-pitch-900 border rounded-2xl overflow-hidden mb-4 transition-all hover:scale-[1.01] ${!isScheduled && activeTab === 'past' && resultLabel ? resultColor : 'border-white/10 hover:border-neon/30'}`}>
               
               {/* Date Strip */}
               <div className={`flex flex-row md:flex-col items-center justify-center p-4 min-w-[80px] ${isScheduled || activeTab === 'upcoming' ? 'bg-neon text-pitch-950' : 'bg-black/40 text-gray-400'} font-display font-bold`}>
@@ -168,27 +179,53 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
     <div className="space-y-6 pb-24 max-w-3xl mx-auto relative">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-            <div>
-                <h2 className="text-4xl font-display font-bold text-white uppercase italic tracking-wide">
-                    Calendário <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Oficial</span>
-                </h2>
-                <p className="text-sm text-gray-400">Acompanhe a jornada do time rumo à glória.</p>
+        <div className="flex flex-col gap-4 mb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h2 className="text-4xl font-display font-bold text-white uppercase italic tracking-wide">
+                        Calendário <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Oficial</span>
+                    </h2>
+                    <p className="text-sm text-gray-400">Acompanhe a jornada dos times rumo à glória.</p>
+                </div>
+
+                {/* Main Filter (Upcoming vs Results) */}
+                <div className="bg-pitch-900 p-1 rounded-xl border border-white/10 flex self-start md:self-auto">
+                    <button 
+                        onClick={() => setActiveTab('upcoming')}
+                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${activeTab === 'upcoming' ? 'bg-neon text-pitch-950 shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Próximos
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('past')}
+                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${activeTab === 'past' ? 'bg-white text-pitch-950 shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Resultados
+                    </button>
+                </div>
             </div>
 
-            {/* Tabs */}
-            <div className="bg-pitch-900 p-1 rounded-xl border border-white/10 flex">
+            {/* Scope Filter (All vs Mine) */}
+            <div className="flex gap-2">
                 <button 
-                    onClick={() => setActiveTab('upcoming')}
-                    className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${activeTab === 'upcoming' ? 'bg-neon text-pitch-950 shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                    onClick={() => setScope('all')}
+                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase border transition-all ${
+                        scope === 'all' 
+                        ? 'bg-white/10 border-white text-white' 
+                        : 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500'
+                    }`}
                 >
-                    Próximos
+                    🌎 Todos os Jogos
                 </button>
                 <button 
-                    onClick={() => setActiveTab('past')}
-                    className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${activeTab === 'past' ? 'bg-white text-pitch-950 shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                    onClick={() => setScope('mine')}
+                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase border transition-all ${
+                        scope === 'mine' 
+                        ? 'bg-blue-500/20 border-blue-400 text-blue-400' 
+                        : 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500'
+                    }`}
                 >
-                    Resultados
+                    👤 Meus Jogos
                 </button>
             </div>
         </div>
@@ -200,9 +237,9 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                     <span className="text-5xl block mb-4 opacity-30">📅</span>
                     <h3 className="text-xl font-bold text-white">Nenhum jogo {activeTab === 'upcoming' ? 'agendado' : 'encontrado'}</h3>
                     <p className="text-sm text-gray-500 mt-2">
-                        {activeTab === 'upcoming' 
-                            ? "Fale com o dono do time para marcar um amistoso!" 
-                            : "O histórico de partidas aparecerá aqui."}
+                        {scope === 'mine' 
+                            ? "Você não tem jogos nesta categoria. Mude para 'Todos os Jogos' para explorar." 
+                            : "Nenhuma partida encontrada no sistema."}
                     </p>
                 </div>
             ) : (
