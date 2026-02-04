@@ -46,12 +46,23 @@ const UserLocationMarker = () => {
     const map = useMap();
 
     useEffect(() => {
-        // Locate user
-        map.locate().on("locationfound", function (e) {
-            setPosition([e.latlng.lat, e.latlng.lng]);
-            // Fly to location with Zoom 15 (Street/Neighborhood level, but not too close)
-            map.flyTo(e.latlng, 15);
+        // CRITICAL UPDATE: Locate user immediately and set view (setView: true)
+        // This forces the map to center on the user right at startup, ignoring the default center.
+        map.locate({ 
+            setView: true, 
+            maxZoom: 16,
+            enableHighAccuracy: true 
         });
+
+        const onLocationFound = (e: L.LocationEvent) => {
+            setPosition([e.latlng.lat, e.latlng.lng]);
+        };
+
+        map.on("locationfound", onLocationFound);
+
+        return () => {
+            map.off("locationfound", onLocationFound);
+        };
     }, [map]);
 
     const userIcon = L.divIcon({
@@ -76,7 +87,7 @@ const UserLocationMarker = () => {
 export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams }) => {
   const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
   
-  // Default center (New York) - Zoom 13 provides a good initial city overview
+  // Default center acts as a placeholder only until UserLocationMarker kicks in
   const defaultCenter: [number, number] = [40.7128, -74.0060];
 
   return (

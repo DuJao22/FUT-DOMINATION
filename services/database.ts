@@ -54,6 +54,9 @@ class DatabaseService {
             avatar_url TEXT,
             bio TEXT,
             location TEXT,
+            onboarding_completed INTEGER DEFAULT 0,
+            position TEXT,
+            shirt_number INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           )`,
           `CREATE TABLE IF NOT EXISTS ${TABLES.TEAMS} (
@@ -97,11 +100,23 @@ class DatabaseService {
       for (const sql of queries) {
           try {
               // Schema init uses direct execution without params
-              await this.query(sql); // Use query method to benefit from retry logic
+              await this.query(sql); 
           } catch (e) {
               console.log("⚠️ Schema info:", e);
           }
       }
+
+      // MIGRATION: Attempt to add columns if they don't exist (for existing tables)
+      try {
+          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN onboarding_completed INTEGER DEFAULT 0`);
+      } catch (e) { /* Ignore if exists */ }
+      try {
+          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN position TEXT`);
+      } catch (e) { /* Ignore if exists */ }
+      try {
+          await this.query(`ALTER TABLE ${TABLES.USERS} ADD COLUMN shirt_number INTEGER`);
+      } catch (e) { /* Ignore if exists */ }
+
       console.log("✅ Schema Verified.");
   }
 
@@ -159,7 +174,10 @@ class DatabaseService {
         location: row.location,
         following: [], 
         stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
-        badges: [] 
+        badges: [],
+        onboardingCompleted: Boolean(row.onboarding_completed),
+        position: row.position,
+        shirtNumber: row.shirt_number
     };
   }
 
@@ -198,12 +216,12 @@ class DatabaseService {
     try {
         console.log(`Attempting to register user: ${safeEmail}`);
         await this.query(
-            `INSERT INTO ${TABLES.USERS} (id, name, email, role, avatar_url, bio, location) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO ${TABLES.USERS} (id, name, email, role, avatar_url, bio, location, onboarding_completed) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
             [user.id, user.name, safeEmail, user.role, user.avatarUrl, user.bio, user.location]
         );
         console.log("✅ User successfully persisted.");
-        return { ...user, email: safeEmail };
+        return { ...user, email: safeEmail, onboardingCompleted: false };
     } catch (error) {
         console.error("🚨 Registration Fatal Error:", error);
         throw error;
@@ -262,6 +280,75 @@ class DatabaseService {
       }
   }
 
+  // --- ONBOARDING METHODS ---
+
+  async completeOnboarding(
+      userId: string, 
+      role: UserRole, 
+      profileData: { 
+          name: string; 
+          location: string; 
+          position?: string; 
+          shirtNumber?: number; 
+          avatarUrl?: string;
+      },
+      teamData?: {
+          name: string;
+          homeTurf: string;
+          category: string;
+          logoUrl: string;
+      }
+  ): Promise<{ success: boolean; user?: User; team?: Team }> {
+      try {
+          // 1. Update basic user info
+          await this.query(
+              `UPDATE ${TABLES.USERS} 
+               SET name = ?, location = ?, role = ?, position = ?, shirt_number = ?, avatar_url = ?, onboarding_completed = 1 
+               WHERE id = ?`,
+              [
+                  profileData.name, 
+                  profileData.location, 
+                  role, 
+                  profileData.position || null, 
+                  profileData.shirtNumber || null,
+                  profileData.avatarUrl,
+                  userId
+              ]
+          );
+
+          // 2. If OWNER, create team
+          let newTeam: Team | undefined;
+          if (role === UserRole.OWNER && teamData) {
+              const teamId = `t-${Date.now()}`;
+              newTeam = {
+                  id: teamId,
+                  name: teamData.name,
+                  logoUrl: teamData.logoUrl,
+                  wins: 0, losses: 0, draws: 0,
+                  territoryColor: '#39ff14',
+                  players: [],
+                  ownerId: userId,
+                  category: teamData.category as any,
+                  homeTurf: teamData.homeTurf
+              };
+
+              await this.createTeam(newTeam);
+              
+              // Link user to team
+              await this.query(`UPDATE ${TABLES.USERS} SET team_id = ? WHERE id = ?`, [teamId, userId]);
+          }
+
+          // Fetch updated user
+          const updatedUser = await this.getUserById(userId);
+          
+          return { success: true, user: updatedUser!, team: newTeam };
+
+      } catch (e) {
+          console.error("Onboarding Error:", e);
+          return { success: false };
+      }
+  }
+
   // --- TEAM METHODS ---
 
   async createTeam(team: Team): Promise<boolean> {
@@ -278,15 +365,52 @@ class DatabaseService {
       }
   }
 
+  async addPlayerByEmail(email: string, teamId: string): Promise<{ success: boolean, message: string, user?: User }> {
+      const safeEmail = email.trim().toLowerCase();
+      try {
+          // 1. Check if user exists
+          const rows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE email = ? LIMIT 1`, [safeEmail]);
+          
+          if (!Array.isArray(rows) || rows.length === 0) {
+              return { success: false, message: "Usuário não encontrado. Peça para ele criar uma conta primeiro." };
+          }
+          
+          const user = this.mapUser(rows[0]);
+
+          // 2. Check if already in a team
+          if (user.teamId) {
+              return { success: false, message: "Este jogador já está em outro time." };
+          }
+
+          // 3. Update user
+          await this.query(
+              `UPDATE ${TABLES.USERS} SET team_id = ?, role = 'PLAYER' WHERE id = ?`,
+              [teamId, user.id]
+          );
+
+          // Return updated user object
+          return { 
+              success: true, 
+              message: "Jogador adicionado ao elenco!", 
+              user: { ...user, teamId, role: UserRole.PLAYER } 
+          };
+
+      } catch (e) {
+          console.error("Add Player Error:", e);
+          return { success: false, message: "Erro interno ao adicionar jogador." };
+      }
+  }
+
   async getTeams(): Promise<Team[]> {
     try {
         const rows = await this.query(`SELECT * FROM ${TABLES.TEAMS}`);
         const teams = Array.isArray(rows) ? rows.map(this.mapTeam) : [];
         
         for (const team of teams) {
-            if(team.ownerId) {
-                const owner = await this.getUserById(team.ownerId);
-                if(owner) team.players.push(owner);
+            // Fetch ALL players for the team, not just owner
+            const playerRows = await this.query(`SELECT * FROM ${TABLES.USERS} WHERE team_id = ?`, [team.id]);
+            if(Array.isArray(playerRows)) {
+                team.players = playerRows.map(this.mapUser);
             }
         }
         return teams;

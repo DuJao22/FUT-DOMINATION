@@ -16,17 +16,19 @@ export const MOCK_AUTH_DB = [
     location: 'Brasil',
     following: ['team_01'],
     badges: [],
-    stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 }
+    stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
+    onboardingCompleted: true
   }
 ];
 
 // Helper to get players for a team
 const getPlayersForTeam = (teamId: string): User[] => {
-  return MOCK_AUTH_DB.filter(u => u.teamId === teamId);
+  // Cast to unknown then User[] to handle extra properties like password in mock data
+  return MOCK_AUTH_DB.filter(u => u.teamId === teamId) as unknown as User[];
 }
 
 // Fallback user
-export const CURRENT_USER = MOCK_AUTH_DB[0];
+export const CURRENT_USER = MOCK_AUTH_DB[0] as unknown as User;
 
 // Mantemos 1 Time Genérico (Vazio) para o Dono gerenciar
 export const MOCK_TEAMS: Team[] = [

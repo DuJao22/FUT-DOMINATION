@@ -39,7 +39,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 location: 'Brasil',
                 following: [],
                 stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
-                badges: []
+                badges: [],
+                onboardingCompleted: false
             };
 
             // 2. Call DB Service

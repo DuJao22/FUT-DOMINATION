@@ -4,11 +4,12 @@ import { TerritoryMap } from './components/TerritoryMap';
 import { GenAIStudio } from './components/GenAIStudio';
 import { Feed } from './components/Feed';
 import { Auth } from './components/Auth';
+import { Onboarding } from './components/Onboarding';
 import { TeamManagement } from './components/TeamManagement';
 import { MatchLogger } from './components/MatchLogger';
 import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
-import { MOCK_POSTS } from './constants'; // Keep posts mock for now, but teams/matches are real
+import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory } from './types';
 import { dbService } from './services/database';
 
@@ -16,7 +17,7 @@ import { dbService } from './services/database';
 const ReloadButton = () => (
   <button 
     onClick={() => window.location.reload()} 
-    className="fixed bottom-4 right-4 z-[9999] bg-pitch-900/80 backdrop-blur border border-white/20 text-white p-3 rounded-full shadow-2xl hover:bg-neon hover:text-black transition-all group"
+    className="fixed bottom-28 right-4 z-[9999] bg-pitch-900/80 backdrop-blur border border-white/20 text-white p-3 rounded-full shadow-2xl hover:bg-neon hover:text-black transition-all group"
     title="Recarregar App"
   >
     <svg className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -63,7 +64,8 @@ const App: React.FC = () => {
                 if (user) {
                     setActiveUser(user);
                     if (user.role === UserRole.OWNER) {
-                         setCurrentTab('team');
+                         // Only force tab if they finished onboarding, otherwise Onboarding takes precedence
+                         if (user.onboardingCompleted) setCurrentTab('team');
                     }
                 } else {
                     localStorage.removeItem('fut_dom_user_id');
@@ -101,9 +103,8 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     localStorage.setItem('fut_dom_user_id', user.id);
     setActiveUser(user);
-    // Refresh data on login to ensure we see the user's latest state/teams
     refreshData();
-    if (user.role === UserRole.OWNER) {
+    if (user.role === UserRole.OWNER && user.onboardingCompleted) {
       setCurrentTab('team');
     } else {
       setCurrentTab('map');
@@ -118,7 +119,18 @@ const App: React.FC = () => {
 
   const handleUserUpdate = (updatedUser: User) => {
     setActiveUser(updatedUser);
-    refreshData(); // Refresh to show new team created
+    refreshData();
+  };
+
+  // --- ONBOARDING COMPLETION HANDLER ---
+  const handleOnboardingComplete = (finalUser: User) => {
+      setActiveUser(finalUser);
+      refreshData(); // Refresh to see new team if created
+      if (finalUser.role === UserRole.OWNER) {
+          setCurrentTab('team');
+      } else {
+          setCurrentTab('map');
+      }
   };
 
   if (isInitializing) {
@@ -153,6 +165,13 @@ const App: React.FC = () => {
         <ReloadButton />
       </>
     );
+  }
+
+  // --- MANDATORY ONBOARDING CHECK ---
+  if (!activeUser.onboardingCompleted) {
+      return (
+          <Onboarding user={activeUser} onComplete={handleOnboardingComplete} />
+      );
   }
 
   // Find the team associated with the user

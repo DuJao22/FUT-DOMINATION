@@ -14,8 +14,8 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex items-center justify-between mb-2">
-         <h2 className="text-3xl font-display font-bold text-white uppercase italic">Classificação</h2>
+      <div className="flex items-center justify-end mb-2 pt-2">
+         {/* Title removed to avoid duplication with App header */}
          <div className="bg-pitch-900 rounded-lg p-1 flex gap-1 border border-pitch-800">
             {(['bairro', 'cidade', 'estado'] as const).map(f => (
                <button 

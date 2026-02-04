@@ -1,3 +1,4 @@
+
 export enum UserRole {
   OWNER = 'OWNER',
   PLAYER = 'PLAYER', // Usually assigned by Owner
@@ -24,7 +25,17 @@ export interface User {
   badges?: string[];
   subscriptionActive?: boolean; // For Owners
   following: string[]; // Array of Team IDs the user follows
+  
+  // Onboarding Control
+  onboardingCompleted: boolean;
+
+  // New fields for Team Management
+  position?: 'GK' | 'DEF' | 'MID' | 'FWD'; 
+  isStarter?: boolean;
+  shirtNumber?: number;
 }
+
+export type TeamCategory = 'Sub-15' | 'Sub-17' | 'Sub-20' | 'Adulto/Livre' | 'Veterano' | 'Society' | 'Futsal';
 
 export interface Team {
   id: string;
@@ -36,7 +47,7 @@ export interface Team {
   territoryColor: string;
   players: User[];
   ownerId: string;
-  category: 'Society' | 'Futsal' | 'Field';
+  category: TeamCategory;
   homeTurf?: string; // Bairro Base
 }
 
