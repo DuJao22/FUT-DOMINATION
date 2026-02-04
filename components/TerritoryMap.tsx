@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Territory, Team } from '../types';
@@ -9,36 +9,31 @@ interface TerritoryMapProps {
 }
 
 // Function to create a custom HTML marker for teams
+// Refactored for cleaner HTML and subtler animations
 const createCustomIcon = (team: Team | undefined, territoryPoints: number) => {
   const color = team ? team.territoryColor : '#64748b'; // Default gray
   const logo = team?.logoUrl || 'https://www.svgrepo.com/show/530412/shield.svg';
   
-  // Larger, glowing marker for owned territories with "Conquest" animation (Ping)
+  // Optimized HTML: Reduced DOM complexity inside the marker
+  // Animation: Changed from aggressive ping to a subtle pulse/glow
   return L.divIcon({
-    className: 'custom-marker',
+    className: 'custom-marker-optimized',
     html: `
-      <div class="relative w-12 h-12 flex items-center justify-center">
+      <div class="relative w-12 h-12 flex items-center justify-center transition-transform duration-500 hover:scale-110">
         
-        <!-- VIBRANT CONQUEST ANIMATION (Only if Team exists) -->
+        <!-- Subtle Glow Layer (Visible for owned territories) -->
         ${team ? `
-          <!-- Outer Expanding Ring (Ping) -->
-          <div class="absolute -inset-4 rounded-full opacity-60 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" style="background-color: ${color}"></div>
-          
-          <!-- Inner Pulsing Glow -->
-          <div class="absolute -inset-1 rounded-full opacity-40 animate-pulse blur-sm" style="background-color: ${color}"></div>
+          <div class="absolute inset-0 rounded-full opacity-40 blur-md animate-pulse" style="background-color: ${color}; box-shadow: 0 0 15px ${color}"></div>
         ` : ''}
         
-        <!-- Static Glow background -->
-        <div class="absolute inset-0 rounded-full opacity-20 blur-md" style="background-color: ${color}"></div>
-        
         <!-- Main Marker Container -->
-        <div class="relative w-12 h-12 rounded-full border-2 bg-black overflow-hidden flex items-center justify-center group hover:scale-110 transition-transform duration-300 z-10" style="border-color: ${color}; box-shadow: 0 0 15px ${color}">
-           ${team ? `<img src="${logo}" class="w-full h-full object-cover opacity-90" />` : `<span class="text-xl">🏳️</span>`}
+        <div class="relative w-10 h-10 rounded-full border-2 bg-black overflow-hidden flex items-center justify-center z-10 shadow-lg" style="border-color: ${color}">
+           ${team ? `<img src="${logo}" class="w-full h-full object-cover opacity-90" />` : `<span class="text-lg opacity-50">🏳️</span>`}
         </div>
         
-        <!-- Points Badge -->
-        <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/90 text-[10px] font-bold px-2 py-0.5 rounded border backdrop-blur-sm whitespace-nowrap z-20" style="color: ${color}; border-color: ${color}">
-          ${territoryPoints} PTS
+        <!-- Points Badge (Floats slightly) -->
+        <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/90 text-[9px] font-bold px-1.5 py-0.5 rounded border shadow-sm whitespace-nowrap z-20" style="color: ${color}; border-color: ${color}">
+          ${territoryPoints}
         </div>
       </div>
     `,
@@ -53,8 +48,7 @@ const UserLocationMarker = () => {
     const map = useMap();
 
     useEffect(() => {
-        // CRITICAL UPDATE: Locate user immediately and set view (setView: true)
-        // This forces the map to center on the user right at startup, ignoring the default center.
+        // Locate user immediately and set view
         map.locate({ 
             setView: true, 
             maxZoom: 16,
@@ -97,6 +91,28 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams }
   // Default center acts as a placeholder only until UserLocationMarker kicks in
   const defaultCenter: [number, number] = [40.7128, -74.0060];
 
+  // --- OPTIMIZATION: MEMOIZE MARKERS ---
+  // This prevents react-leaflet from re-creating markers on every render cycle
+  // drastically improving performance when panning/zooming or opening modals.
+  const territoryMarkers = useMemo(() => {
+      return territories.map((t) => {
+          const owner = teams.find(team => team.id === t.ownerTeamId);
+          return (
+              <Marker 
+                  key={t.id} 
+                  position={[t.lat, t.lng]} 
+                  icon={createCustomIcon(owner, t.points)}
+                  // @ts-ignore
+                  eventHandlers={{
+                      click: () => {
+                          setSelectedTerritory(t);
+                      },
+                  }}
+              />
+          );
+      });
+  }, [territories, teams]);
+
   return (
     <div className="relative w-full h-full md:h-[600px] overflow-hidden md:rounded-3xl border-t md:border border-pitch-800 shadow-2xl bg-[#0f172a]">
       
@@ -115,26 +131,13 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams }
         
         <UserLocationMarker />
 
-        {territories.map((t) => {
-            const owner = teams.find(team => team.id === t.ownerTeamId);
-            return (
-                <Marker 
-                    key={t.id} 
-                    position={[t.lat, t.lng]} 
-                    icon={createCustomIcon(owner, t.points)}
-                    // @ts-ignore
-                    eventHandlers={{
-                        click: () => {
-                            setSelectedTerritory(t);
-                        },
-                    }}
-                />
-            );
-        })}
+        {/* Render Memoized Markers */}
+        {territoryMarkers}
+
       </MapContainer>
 
-      {/* Floating UI Controls - Positioned to avoid overlap with App Title on Mobile */}
-      <div className="absolute top-24 left-4 md:top-4 md:left-4 bg-black/80 backdrop-blur px-3 py-1 rounded-full border border-neon/30 flex items-center gap-2 z-[400] shadow-lg">
+      {/* Floating UI Controls */}
+      <div className="absolute top-24 left-4 md:top-4 md:left-4 bg-black/80 backdrop-blur px-3 py-1 rounded-full border border-neon/30 flex items-center gap-2 z-[400] shadow-lg pointer-events-none">
          <div className="w-2 h-2 bg-neon rounded-full animate-pulse"></div>
          <span className="text-xs font-bold text-neon uppercase tracking-wider">Mapa ao Vivo</span>
       </div>
