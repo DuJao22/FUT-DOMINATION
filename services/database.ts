@@ -136,13 +136,28 @@ class DatabaseService {
           }
       }
       
-      // Attempt to add new columns to existing teams table if they don't exist
+      // Migration: Add new columns safely
       try {
-        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN city TEXT`);
-        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN state TEXT`);
-        await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN neighborhood TEXT`);
+          const tableInfo = await this.query(`PRAGMA table_info(${TABLES.TEAMS})`);
+          // tableInfo is array of objects {cid, name, type, notnull, dflt_value, pk}
+          if (Array.isArray(tableInfo)) {
+              const existingColumns = tableInfo.map((col: any) => col.name);
+              
+              if (!existingColumns.includes('city')) {
+                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN city TEXT`);
+                  console.log("✅ Migrated: Added 'city' to teams");
+              }
+              if (!existingColumns.includes('state')) {
+                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN state TEXT`);
+                  console.log("✅ Migrated: Added 'state' to teams");
+              }
+              if (!existingColumns.includes('neighborhood')) {
+                  await this.query(`ALTER TABLE ${TABLES.TEAMS} ADD COLUMN neighborhood TEXT`);
+                  console.log("✅ Migrated: Added 'neighborhood' to teams");
+              }
+          }
       } catch (e) {
-        // Ignore error if columns exist
+        console.warn("⚠️ Schema migration check skipped or failed:", e);
       }
 
       console.log("✅ Schema Verified.");

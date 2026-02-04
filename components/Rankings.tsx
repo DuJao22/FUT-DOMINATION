@@ -6,30 +6,29 @@ interface RankingsProps {
 }
 
 export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
-  const [filter, setFilter] = useState<'bairro' | 'cidade' | 'estado'>('cidade');
+  // Updated filter state to include new scopes
+  const [filter, setFilter] = useState<'mundial' | 'nacional' | 'estado' | 'cidade' | 'bairro'>('cidade');
   
   // Find current user's team context (for filtering reference)
-  // In a real scenario, we'd pass the currentUser or their team directly.
-  // For now, we assume the "current user" is the owner of the first team found in local storage or context, 
-  // but since we don't have user context here, we will infer it from the 'myTeam' passed down or default to the most popular location.
-  // IMPROVEMENT: Ideally this component receives `currentUserTeam` prop.
-  // Fallback: We'll use the first team that has data as "My Context" for demo purposes if not strictly passed.
-  // IMPORTANT: For the strict requirement "Rankings dos filtros selecionados", we need a Reference Point.
-  // I will use the location of the *first team in the list* as the "User's Local Context" if I can't find a better one, 
-  // effectively showing "Rankings for [City of Team 1]". 
-  
-  // Let's assume the user wants to see rankings relative to *their* team.
-  // Filter logic:
   const myTeam = teams.find(t => t.id === localStorage.getItem('fut_dom_user_team_id')) || teams[0];
   
   const referenceLocation = {
+      country: 'Brasil', // Hardcoded scope for Nacional
       city: myTeam?.city || 'São Paulo',
       state: myTeam?.state || 'SP',
       neighborhood: myTeam?.neighborhood || 'Centro'
   };
 
   const filteredTeams = teams.filter(team => {
-      if (!team.city) return true; // Show all if data is missing (legacy support)
+      // Mundial shows everyone
+      if (filter === 'mundial') return true;
+
+      // Nacional shows everyone valid (assuming app is currently BR only)
+      // We check if they have at least a state registered to be considered "Active" in the country list
+      if (filter === 'nacional') return !!team.state;
+
+      // Legacy/Incomplete data handling: If strict location missing, hide from strict lists
+      if (!team.city || !team.state) return false;
       
       if (filter === 'estado') return team.state === referenceLocation.state;
       if (filter === 'cidade') return team.city === referenceLocation.city;
@@ -42,29 +41,39 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
   const top3 = sortedTeams.slice(0, 3);
   const rest = sortedTeams.slice(3);
 
+  // Helper for dynamic header title
+  const getHeaderTitle = () => {
+      switch(filter) {
+          case 'mundial': return 'Ranking Global';
+          case 'nacional': return 'Brasil';
+          case 'estado': return referenceLocation.state;
+          case 'cidade': return referenceLocation.city;
+          case 'bairro': return referenceLocation.neighborhood;
+          default: return 'Ranking';
+      }
+  };
+
   return (
     <div className="space-y-6 pb-24">
       
       {/* Header Context */}
-      <div className="text-center mb-4">
-          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">Ranking Oficial</p>
-          <h2 className="text-2xl font-display font-bold text-white">
-              {filter === 'bairro' && referenceLocation.neighborhood}
-              {filter === 'cidade' && referenceLocation.city}
-              {filter === 'estado' && referenceLocation.state}
+      <div className="text-center mb-4 pt-4">
+          <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">Classificação Oficial</p>
+          <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide text-glow">
+              {getHeaderTitle()}
           </h2>
       </div>
 
-      {/* Filters Segmented Control */}
-      <div className="flex justify-center pt-2 mb-6">
-         <div className="bg-pitch-950/80 backdrop-blur-xl rounded-full p-1.5 flex gap-1 border border-white/10 shadow-lg relative z-20">
-            {(['bairro', 'cidade', 'estado'] as const).map(f => (
+      {/* Filters Segmented Control - Scrollable on Mobile */}
+      <div className="flex justify-center mb-8 px-4">
+         <div className="bg-pitch-950/80 backdrop-blur-xl rounded-2xl p-1.5 flex gap-1 border border-white/10 shadow-lg relative z-20 overflow-x-auto max-w-full no-scrollbar snap-x">
+            {(['mundial', 'nacional', 'estado', 'cidade', 'bairro'] as const).map(f => (
                <button 
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`px-6 py-2 rounded-full text-xs font-bold uppercase transition-all duration-300 ${
+                  className={`px-5 py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase transition-all duration-300 whitespace-nowrap snap-center ${
                       filter === f 
-                      ? 'bg-neon text-pitch-950 shadow-[0_0_15px_rgba(57,255,20,0.4)] scale-105' 
+                      ? 'bg-neon text-pitch-950 shadow-[0_0_15px_rgba(57,255,20,0.4)]' 
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                >
@@ -75,9 +84,10 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
       </div>
 
       {sortedTeams.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12 bg-white/5 rounded-3xl mx-4 border border-dashed border-white/10">
               <span className="text-4xl block mb-2 opacity-50">🌍</span>
-              <p className="text-gray-400">Nenhum time encontrado nesta região.</p>
+              <p className="text-gray-400 font-bold">Nenhum time encontrado.</p>
+              <p className="text-xs text-gray-600 mt-1">Seja o primeiro a dominar esta região!</p>
           </div>
       ) : (
         <>

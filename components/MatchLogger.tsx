@@ -431,7 +431,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                          </div>
                      </div>
                      
-                     <div className="p-5 space-y-5 pb-24 bg-gradient-to-b from-pitch-900 to-pitch-950 flex-1">
+                     <form id="court-form" onSubmit={handleRegisterCourt} className="p-5 space-y-5 pb-24 bg-gradient-to-b from-pitch-900 to-pitch-950 flex-1">
                         <div>
                             <label className="block text-neon text-[10px] font-bold uppercase mb-1 tracking-wider">Nome do Local</label>
                             <input 
@@ -502,7 +502,7 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                                 onChange={e => setCourtForm({...courtForm, phone: e.target.value})}
                             />
                         </div>
-                     </div>
+                     </form>
                 </div>
             )}
 
