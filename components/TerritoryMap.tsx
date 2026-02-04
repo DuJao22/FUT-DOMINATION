@@ -1,18 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Territory, Team, Court, PickupGame } from '../types';
+import { Territory, Team, Court, PickupGame, User } from '../types';
+import { dbService } from '../services/database';
 
 interface TerritoryMapProps {
   territories: Territory[];
   teams: Team[];
   courts?: Court[];
   pickupGames?: PickupGame[];
+  currentUser?: User; // Added to track who registers the court
+  onCourtAdded?: () => void; // Callback to refresh data
 }
 
-// 1. MARCADOR DE TERRITÓRIO (SHIELD)
+// --- ÍCONES ---
+
 const createTerritoryIcon = (team: Team | undefined, territoryPoints: number) => {
-  const color = team ? team.territoryColor : '#64748b'; // Cinza se sem dono
+  const color = team ? team.territoryColor : '#64748b';
   const logo = team?.logoUrl || 'https://www.svgrepo.com/show/530412/shield.svg';
   
   return L.divIcon({
@@ -33,7 +37,6 @@ const createTerritoryIcon = (team: Team | undefined, territoryPoints: number) =>
   });
 };
 
-// 2. MARCADOR DE QUADRA (PAGA vs GRÁTIS)
 const createCourtIcon = (isPaid: boolean) => {
     const color = isPaid ? '#fbbf24' : '#39ff14'; // Gold vs Neon
     const icon = isPaid ? '💲' : '⚽';
@@ -56,24 +59,28 @@ const createCourtIcon = (isPaid: boolean) => {
     });
 };
 
-// 3. MARCADOR DE USUÁRIO TIPO "RADAR"
-const UserLocationMarker = () => {
-    const [position, setPosition] = useState<[number, number] | null>(null);
+// --- COMPONENTES INTERNOS DO MAPA ---
+
+// 1. Controlador de Localização e Recentralização
+const UserLocationController = ({ onLocationFound }: { onLocationFound: (lat: number, lng: number) => void }) => {
     const map = useMap();
+    const [position, setPosition] = useState<[number, number] | null>(null);
 
     useEffect(() => {
+        // OBRIGATÓRIO: Puxar localização ao iniciar com setView true
         map.locate({ 
             setView: true, 
-            maxZoom: 15,
+            maxZoom: 16,
             enableHighAccuracy: true 
         });
 
-        const onLocationFound = (e: L.LocationEvent) => {
+        const handleLocationFound = (e: L.LocationEvent) => {
             setPosition([e.latlng.lat, e.latlng.lng]);
+            onLocationFound(e.latlng.lat, e.latlng.lng);
         };
 
-        map.on("locationfound", onLocationFound);
-        return () => { map.off("locationfound", onLocationFound); };
+        map.on("locationfound", handleLocationFound);
+        return () => { map.off("locationfound", handleLocationFound); };
     }, [map]);
 
     const radarIcon = L.divIcon({
@@ -89,46 +96,115 @@ const UserLocationMarker = () => {
         iconAnchor: [16, 16]
     });
 
-    return position === null ? null : (
-        <Marker position={position} icon={radarIcon} zIndexOffset={1000} />
+    return position ? <Marker position={position} icon={radarIcon} zIndexOffset={1000} /> : null;
+};
+
+// 2. Controlador de Cliques para Adicionar Quadra
+const AddCourtClickController = ({ isActive, onMapClick }: { isActive: boolean, onMapClick: (lat: number, lng: number) => void }) => {
+    useMapEvents({
+        click(e) {
+            if (isActive) {
+                onMapClick(e.latlng.lat, e.latlng.lng);
+            }
+        },
+    });
+    return null;
+};
+
+// 3. Botão de Recentralizar (GPS)
+const RecenterButton = () => {
+    const map = useMap();
+    return (
+        <button 
+            onClick={(e) => {
+                e.stopPropagation();
+                map.locate({ setView: true, maxZoom: 16 });
+            }}
+            className="absolute bottom-24 right-4 md:bottom-8 md:right-4 z-[500] bg-pitch-950 p-3 rounded-full border border-white/20 shadow-lg text-white hover:text-neon hover:border-neon active:scale-95 transition-all"
+        >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        </button>
     );
 };
 
-export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, courts = [], pickupGames = [] }) => {
+
+export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, courts = [], pickupGames = [], currentUser, onCourtAdded }) => {
   const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   
-  // Center placeholder (NYC) -> Will be overridden by user location
-  const defaultCenter: [number, number] = [40.7128, -74.0060];
+  // -- ESTADOS DE ADIÇÃO DE QUADRA --
+  const [isAddingCourt, setIsAddingCourt] = useState(false);
+  const [newCourtPos, setNewCourtPos] = useState<{lat: number, lng: number} | null>(null);
+  const [newCourtForm, setNewCourtForm] = useState({ name: '', isPaid: false });
+  const [isSaving, setIsSaving] = useState(false);
 
   // Helper to find upcoming games for a court
   const getUpcomingGames = (court: Court) => {
-      // Simple proximity check or ID match if we linked them
       return pickupGames.filter(g => {
           const dist = Math.sqrt(Math.pow(g.lat - court.lat, 2) + Math.pow(g.lng - court.lng, 2));
-          return dist < 0.0005; // ~50m
+          return dist < 0.0005; 
       });
   };
 
   const upcomingGamesForSelected = selectedCourt ? getUpcomingGames(selectedCourt) : [];
 
+  const handleSaveCourt = async () => {
+      if (!newCourtPos || !newCourtForm.name) return;
+      setIsSaving(true);
+      try {
+          const newCourt: Court = {
+              id: `court-${Date.now()}`,
+              name: newCourtForm.name,
+              isPaid: newCourtForm.isPaid,
+              lat: newCourtPos.lat,
+              lng: newCourtPos.lng,
+              address: 'Local Sinalizado no Mapa', // Placeholder
+              cep: '',
+              number: '',
+              phone: '',
+              registeredByTeamId: currentUser?.teamId || 'user_signal'
+          };
+
+          await dbService.createCourt(newCourt);
+          
+          alert("Quadra sinalizada com sucesso!");
+          setNewCourtPos(null);
+          setNewCourtForm({ name: '', isPaid: false });
+          setIsAddingCourt(false);
+          
+          if (onCourtAdded) onCourtAdded();
+
+      } catch (e) {
+          alert("Erro ao salvar quadra.");
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
   return (
     <div className="relative w-full h-full md:h-[calc(100vh-100px)] overflow-hidden bg-pitch-950 md:rounded-3xl md:border border-white/10 shadow-2xl">
       
       <MapContainer 
-        center={defaultCenter} 
+        center={[-23.5505, -46.6333]} // Fallback inicial, será sobrescrito pelo UserLocationController
         zoom={13} 
         scrollWheelZoom={true} 
-        style={{ height: "100%", width: "100%", background: '#020617' }} // Fundo preto para evitar flash branco
+        style={{ height: "100%", width: "100%", background: '#020617' }}
         zoomControl={false}
       >
-        {/* TILE DARK MODE (CartoDB Dark Matter) */}
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         
-        <UserLocationMarker />
+        <UserLocationController onLocationFound={(lat, lng) => {
+            // Optional: Do something with user location globally
+        }} />
+
+        <RecenterButton />
+        <AddCourtClickController 
+            isActive={isAddingCourt} 
+            onMapClick={(lat, lng) => setNewCourtPos({ lat, lng })} 
+        />
         
         {/* Territory Markers */}
         {territories.map((t) => {
@@ -141,6 +217,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                     // @ts-ignore
                     eventHandlers={{
                         click: () => {
+                            if (isAddingCourt) return;
                             setSelectedCourt(null);
                             setSelectedTerritory(t);
                         },
@@ -158,6 +235,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                 // @ts-ignore
                 eventHandlers={{
                     click: () => {
+                        if (isAddingCourt) return;
                         setSelectedTerritory(null);
                         setSelectedCourt(c);
                     }
@@ -165,20 +243,111 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
             />
         ))}
 
+        {/* Marker Temporário de Nova Quadra */}
+        {newCourtPos && (
+             <Marker position={[newCourtPos.lat, newCourtPos.lng]} icon={createCourtIcon(newCourtForm.isPaid)} />
+        )}
+
       </MapContainer>
 
-      {/* OVERLAY: Status Badge (Centered for Mobile) */}
-      <div id="map-status-badge" className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-neon/30 flex items-center gap-2.5 shadow-lg animate-fadeIn">
-             <div className="relative">
-                 <div className="w-2 h-2 bg-neon rounded-full animate-none"></div>
-                 <div className="absolute inset-0 bg-neon rounded-full animate-ping opacity-75"></div>
-             </div>
-             <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest leading-none">
-                 Ao Vivo <span className="text-gray-500 mx-1">•</span> {territories.length} Zonas • {courts.length} Quadras
-             </span>
+      {/* --- OVERLAY: Status Badge --- */}
+      {!isAddingCourt && (
+        <div id="map-status-badge" className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
+            <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-neon/30 flex items-center gap-2.5 shadow-lg animate-fadeIn">
+                <div className="relative">
+                    <div className="w-2 h-2 bg-neon rounded-full animate-none"></div>
+                    <div className="absolute inset-0 bg-neon rounded-full animate-ping opacity-75"></div>
+                </div>
+                <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest leading-none">
+                    Ao Vivo <span className="text-gray-500 mx-1">•</span> {territories.length} Zonas • {courts.length} Quadras
+                </span>
+            </div>
+        </div>
+      )}
+
+      {/* --- OVERLAY: ADD COURT BUTTON (FAB) --- */}
+      {!isAddingCourt && !newCourtPos && (
+          <button 
+            onClick={() => setIsAddingCourt(true)}
+            className="absolute bottom-24 left-4 md:bottom-8 md:left-4 z-[500] bg-neon text-black p-4 rounded-full shadow-[0_0_20px_rgba(57,255,20,0.5)] active:scale-95 transition-transform flex items-center gap-2 font-bold group"
+          >
+              <span className="text-2xl leading-none">+</span>
+              <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 text-sm whitespace-nowrap">Sinalizar Quadra</span>
+          </button>
+      )}
+
+      {/* --- OVERLAY: ADD COURT BANNER (INSTRUCTION) --- */}
+      {isAddingCourt && !newCourtPos && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-neon text-white shadow-2xl animate-bounce">
+              <p className="font-bold text-sm">Toque no mapa onde fica a quadra 📍</p>
+              <button 
+                onClick={() => setIsAddingCourt(false)} 
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+              >
+                  ✕
+              </button>
           </div>
-      </div>
+      )}
+
+      {/* --- MODAL: CONFIRM NEW COURT --- */}
+      {newCourtPos && (
+          <div className="absolute bottom-0 left-0 right-0 p-4 md:p-8 z-[1000] flex justify-center items-end pointer-events-none">
+              <div className="bg-pitch-950 border border-white/20 p-6 rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto animate-slideUp">
+                  <h3 className="text-xl font-display font-bold text-white uppercase italic mb-4">Sinalizar Nova Quadra</h3>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Nome do Local</label>
+                          <input 
+                              type="text" 
+                              value={newCourtForm.name}
+                              onChange={e => setNewCourtForm({...newCourtForm, name: e.target.value})}
+                              placeholder="Ex: Quadra da Praça..."
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-neon focus:outline-none"
+                              autoFocus
+                          />
+                      </div>
+
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between">
+                          <div>
+                              <p className="text-sm font-bold text-white">Tipo de Acesso</p>
+                              <p className="text-[10px] text-gray-400">É preciso pagar pra jogar?</p>
+                          </div>
+                          <div className="flex bg-black p-1 rounded-lg">
+                              <button 
+                                  onClick={() => setNewCourtForm({...newCourtForm, isPaid: false})}
+                                  className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${!newCourtForm.isPaid ? 'bg-neon text-black' : 'text-gray-500'}`}
+                              >
+                                  Gratuita
+                              </button>
+                              <button 
+                                  onClick={() => setNewCourtForm({...newCourtForm, isPaid: true})}
+                                  className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${newCourtForm.isPaid ? 'bg-gold text-black' : 'text-gray-500'}`}
+                              >
+                                  Paga
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                          <button 
+                              onClick={() => { setNewCourtPos(null); setIsAddingCourt(false); }}
+                              className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20"
+                          >
+                              Cancelar
+                          </button>
+                          <button 
+                              onClick={handleSaveCourt}
+                              disabled={!newCourtForm.name || isSaving}
+                              className="flex-1 py-3 bg-neon text-black font-bold rounded-xl hover:scale-[1.02] shadow-neon disabled:opacity-50 transition-all"
+                          >
+                              {isSaving ? 'Salvando...' : 'Confirmar ✅'}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* OVERLAY: Bottom Sheet Territory Details */}
       {selectedTerritory && (

@@ -350,6 +350,8 @@ const App: React.FC = () => {
                     teams={teams} 
                     courts={courts}
                     pickupGames={pickupGames}
+                    currentUser={activeUser}
+                    onCourtAdded={refreshData}
                  />
              </div>
           )}
