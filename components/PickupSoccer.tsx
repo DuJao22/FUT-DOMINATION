@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { PickupGame, User, Court, UserRole } from '../types';
 import { dbService } from '../services/database';
@@ -66,6 +66,13 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
     const [formStep, setFormStep] = useState(1); // 1=Location, 2=Details
     const [newGameLocation, setNewGameLocation] = useState<{lat: number, lng: number} | null>(null);
     const [locationName, setLocationName] = useState('');
+    
+    // CEP Logic
+    const [cep, setCep] = useState('');
+    const [isLoadingCep, setIsLoadingCep] = useState(false);
+    const [addressFound, setAddressFound] = useState('');
+
+    // Step 2 Details
     const [gameTitle, setGameTitle] = useState('');
     const [gameDate, setGameDate] = useState('');
     const [maxPlayers, setMaxPlayers] = useState(14);
@@ -137,6 +144,10 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
             setFormStep(1);
             setGameTitle('');
             setGameDate('');
+            setCep('');
+            setLocationName('');
+            setAddressFound('');
+            setNewGameLocation(null);
             setActiveTab('explore');
             loadData();
         } else {
@@ -148,7 +159,48 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
     const selectCourtForGame = (court: Court) => {
         setNewGameLocation({ lat: court.lat, lng: court.lng });
         setLocationName(court.name);
-        // auto advance could happen here, but let user confirm on map
+        setAddressFound(court.address);
+    };
+
+    // --- CEP HANDLER ---
+    const handleCepBlur = async () => {
+        const rawCep = cep.replace(/\D/g, '');
+        if (rawCep.length !== 8) return;
+
+        setIsLoadingCep(true);
+        try {
+            // 1. Get Address info
+            const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
+            const data = await response.json();
+            
+            if (!data.erro) {
+                const fullAddress = `${data.logradouro}, ${data.bairro}, ${data.localidade}, ${data.uf}, Brasil`;
+                setAddressFound(`${data.logradouro} - ${data.bairro}, ${data.localidade}`);
+                
+                // If location name is empty, auto-fill with something helpful
+                if(!locationName) setLocationName(`${data.bairro} (Rua)`);
+
+                // 2. Geocode to get Lat/Lng
+                const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                const geoData = await geoResponse.json();
+                
+                if (geoData && geoData.length > 0) {
+                    const lat = parseFloat(geoData[0].lat);
+                    const lng = parseFloat(geoData[0].lon);
+                    setNewGameLocation({ lat, lng });
+                } else {
+                    alert("Endereço encontrado, mas não foi possível localizar no mapa. Por favor, ajuste o pino manualmente.");
+                }
+            } else {
+                alert("CEP não encontrado.");
+                setAddressFound('');
+            }
+        } catch (error) {
+            console.error("Erro no CEP:", error);
+            alert("Erro ao buscar CEP. Verifique sua conexão.");
+        } finally {
+            setIsLoadingCep(false);
+        }
     };
 
     const createPinIcon = (isPaid: boolean) => L.divIcon({
@@ -347,17 +399,17 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
 
             {/* CREATE TAB */}
             {activeTab === 'create' && (
-                <div className="flex flex-col h-full bg-pitch-900 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-[slideUp_0.4s_ease-out]">
+                <div className="flex flex-col h-[calc(100vh-180px)] md:h-[calc(100vh-150px)] bg-pitch-900 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-[slideUp_0.4s_ease-out]">
                     {/* Step Indicator */}
-                    <div className="flex bg-black/50 backdrop-blur-sm border-b border-white/10">
+                    <div className="flex bg-black/50 backdrop-blur-sm border-b border-white/10 flex-shrink-0">
                         <div className={`flex-1 text-center text-xs font-bold py-4 uppercase tracking-widest transition-colors ${formStep === 1 ? 'text-neon bg-white/5' : 'text-gray-600'}`}>1. Onde?</div>
                         <div className={`flex-1 text-center text-xs font-bold py-4 uppercase tracking-widest transition-colors ${formStep === 2 ? 'text-neon bg-white/5' : 'text-gray-600'}`}>2. Detalhes</div>
                     </div>
 
                     {formStep === 1 && (
-                        <div className="flex-1 relative flex flex-col">
-                            {/* Map */}
-                            <div className="flex-1 relative z-0 min-h-[400px]">
+                        <div className="flex flex-col h-full overflow-hidden relative">
+                            {/* Map - Responsive Height: 45% on Mobile, Flex on Desktop */}
+                            <div className="h-[45%] md:flex-1 relative z-0 w-full flex-shrink-0">
                                 <MapContainer center={[-23.5505, -46.6333]} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
                                     {/* Show Existing Courts Markers */}
@@ -373,7 +425,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                         forcedPosition={newGameLocation} 
                                         onLocationSelect={(lat, lng) => {
                                             setNewGameLocation({lat, lng});
-                                            setLocationName("Local Selecionado"); // Default, user can edit later
+                                            if(!locationName) setLocationName("Local Selecionado no Mapa");
                                         }} 
                                     />
                                 </MapContainer>
@@ -381,33 +433,72 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                 {/* Overlay hint */}
                                 <div className="absolute top-4 left-4 right-4 z-[400] flex justify-center pointer-events-none">
                                     <div className="bg-black/70 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-2">
-                                        <span className="text-neon animate-pulse">●</span> Toque no mapa ou em uma quadra.
+                                        <span className="text-neon animate-pulse">●</span> Use o CEP ou toque no mapa.
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="p-6 bg-pitch-950 border-t border-neon/20 z-10 rounded-t-3xl -mt-6 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-                                <label className="block text-gray-400 text-[10px] font-bold uppercase mb-2 ml-1">Nome do Local</label>
-                                <input 
-                                    type="text" 
-                                    value={locationName} 
-                                    onChange={e => setLocationName(e.target.value)}
-                                    placeholder="Ex: Quadra do Zé, Parque Villa Lobos..."
-                                    className="w-full bg-black border border-white/20 rounded-xl p-4 text-white text-sm mb-4 focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon transition-all"
-                                />
-                                <button 
-                                    onClick={() => setFormStep(2)}
-                                    disabled={!newGameLocation}
-                                    className="w-full bg-neon text-black font-bold py-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white hover:scale-[1.02] transition-all uppercase tracking-widest shadow-neon"
-                                >
-                                    Confirmar Local
-                                </button>
+                            {/* Form Container - Scrollable on small screens if needed */}
+                            <div className="flex-1 bg-pitch-950 border-t border-neon/20 z-10 rounded-t-3xl -mt-6 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col">
+                                <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                                    {/* CEP SEARCH */}
+                                    <div>
+                                        <label className="text-neon text-[10px] font-bold uppercase ml-1 mb-1 block">Buscar por CEP (Auto-Mapa)</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                value={cep}
+                                                onChange={(e) => {
+                                                    const val = e.target.value.replace(/\D/g, '');
+                                                    setCep(val.length > 5 ? `${val.slice(0,5)}-${val.slice(5,8)}` : val);
+                                                }}
+                                                onBlur={handleCepBlur}
+                                                maxLength={9}
+                                                placeholder="00000-000"
+                                                className="w-full bg-black border border-white/20 rounded-xl p-4 pr-12 text-white text-sm focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon transition-all"
+                                            />
+                                            {isLoadingCep ? (
+                                                <div className="absolute right-4 top-4 w-5 h-5 border-2 border-neon border-t-transparent rounded-full animate-spin"></div>
+                                            ) : (
+                                                <button onClick={handleCepBlur} className="absolute right-4 top-4 text-gray-500 hover:text-white">🔍</button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1 ml-1">Nome do Local</label>
+                                        <input 
+                                            type="text" 
+                                            value={locationName} 
+                                            onChange={e => setLocationName(e.target.value)}
+                                            placeholder="Ex: Quadra do Zé..."
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white text-sm focus:border-neon focus:outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    {addressFound && (
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/5 animate-fadeIn">
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase">Endereço Localizado</p>
+                                            <p className="text-xs text-white truncate">{addressFound}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="p-4 pt-0 mt-auto bg-pitch-950">
+                                    <button 
+                                        onClick={() => setFormStep(2)}
+                                        disabled={!newGameLocation}
+                                        className="w-full bg-neon text-black font-bold py-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white hover:scale-[1.02] transition-all uppercase tracking-widest shadow-neon"
+                                    >
+                                        Confirmar Local
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {formStep === 2 && (
-                        <div className="p-8 space-y-6 bg-pitch-950 h-full overflow-y-auto">
+                        <div className="p-8 space-y-6 bg-pitch-950 h-full overflow-y-auto custom-scrollbar">
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-neon text-xs font-bold uppercase mb-2 ml-1">Título da Pelada</label>
