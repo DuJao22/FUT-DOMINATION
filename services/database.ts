@@ -175,6 +175,14 @@ class DatabaseService {
             );
         `);
 
+        // --- AUTO-MIGRATIONS (SELF-HEALING) ---
+        // Tries to add columns if they are missing from older DB versions.
+        // We catch errors because if the column exists, it throws an error, which implies success.
+        try { await this.db.sql(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await this.db.sql(`ALTER TABLE users ADD COLUMN position TEXT;`); } catch (e) {}
+        try { await this.db.sql(`ALTER TABLE users ADD COLUMN shirt_number INTEGER;`); } catch (e) {}
+        try { await this.db.sql(`ALTER TABLE courts ADD COLUMN is_paid INTEGER DEFAULT 0;`); } catch (e) {}
+
         console.log("✅ Database Schema Synced with SQLite Cloud");
     } catch (error) {
         console.error("❌ Schema Sync Failed. Check Connection.", error);
