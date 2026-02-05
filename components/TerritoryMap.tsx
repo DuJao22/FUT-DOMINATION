@@ -9,8 +9,8 @@ interface TerritoryMapProps {
   teams: Team[];
   courts?: Court[];
   pickupGames?: PickupGame[];
-  currentUser?: User; // Added to track who registers the court
-  onCourtAdded?: () => void; // Callback to refresh data
+  currentUser?: User;
+  onCourtAdded?: () => void;
 }
 
 // --- ÍCONES ---
@@ -61,13 +61,11 @@ const createCourtIcon = (isPaid: boolean) => {
 
 // --- COMPONENTES INTERNOS DO MAPA ---
 
-// 1. Controlador de Localização e Recentralização
 const UserLocationController = ({ onLocationFound }: { onLocationFound: (lat: number, lng: number) => void }) => {
     const map = useMap();
     const [position, setPosition] = useState<[number, number] | null>(null);
 
     useEffect(() => {
-        // OBRIGATÓRIO: Puxar localização ao iniciar com setView true
         map.locate({ 
             setView: true, 
             maxZoom: 16,
@@ -99,7 +97,6 @@ const UserLocationController = ({ onLocationFound }: { onLocationFound: (lat: nu
     return position ? <Marker position={position} icon={radarIcon} zIndexOffset={1000} /> : null;
 };
 
-// 2. Controlador de Cliques para Adicionar Quadra
 const AddCourtClickController = ({ isActive, onMapClick }: { isActive: boolean, onMapClick: (lat: number, lng: number) => void }) => {
     useMapEvents({
         click(e) {
@@ -111,7 +108,6 @@ const AddCourtClickController = ({ isActive, onMapClick }: { isActive: boolean, 
     return null;
 };
 
-// 3. Botão de Recentralizar (GPS)
 const RecenterButton = () => {
     const map = useMap();
     return (
@@ -127,18 +123,14 @@ const RecenterButton = () => {
     );
 };
 
-
 export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, courts = [], pickupGames = [], currentUser, onCourtAdded }) => {
   const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
-  
-  // -- ESTADOS DE ADIÇÃO DE QUADRA --
   const [isAddingCourt, setIsAddingCourt] = useState(false);
   const [newCourtPos, setNewCourtPos] = useState<{lat: number, lng: number} | null>(null);
   const [newCourtForm, setNewCourtForm] = useState({ name: '', isPaid: false });
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helper to find upcoming games for a court
   const getUpcomingGames = (court: Court) => {
       return pickupGames.filter(g => {
           const dist = Math.sqrt(Math.pow(g.lat - court.lat, 2) + Math.pow(g.lng - court.lng, 2));
@@ -158,7 +150,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
               isPaid: newCourtForm.isPaid,
               lat: newCourtPos.lat,
               lng: newCourtPos.lng,
-              address: 'Local Sinalizado no Mapa', // Placeholder
+              address: 'Local Sinalizado no Mapa', 
               cep: '',
               number: '',
               phone: '',
@@ -171,7 +163,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           setNewCourtPos(null);
           setNewCourtForm({ name: '', isPaid: false });
           setIsAddingCourt(false);
-          
           if (onCourtAdded) onCourtAdded();
 
       } catch (e) {
@@ -183,9 +174,8 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
 
   return (
     <div className="relative w-full h-full md:h-[calc(100vh-100px)] overflow-hidden bg-pitch-950 md:rounded-3xl md:border border-white/10 shadow-2xl">
-      
       <MapContainer 
-        center={[-23.5505, -46.6333]} // Fallback inicial, será sobrescrito pelo UserLocationController
+        center={[-23.5505, -46.6333]} 
         zoom={13} 
         scrollWheelZoom={true} 
         style={{ height: "100%", width: "100%", background: '#020617' }}
@@ -196,17 +186,13 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         
-        <UserLocationController onLocationFound={(lat, lng) => {
-            // Optional: Do something with user location globally
-        }} />
-
+        <UserLocationController onLocationFound={(lat, lng) => {}} />
         <RecenterButton />
         <AddCourtClickController 
             isActive={isAddingCourt} 
             onMapClick={(lat, lng) => setNewCourtPos({ lat, lng })} 
         />
         
-        {/* Territory Markers */}
         {territories.map((t) => {
             const owner = teams.find(team => team.id === t.ownerTeamId);
             return (
@@ -226,7 +212,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
             );
         })}
 
-        {/* Court Markers */}
         {courts.map((c) => (
             <Marker 
                 key={`court-${c.id}`}
@@ -243,14 +228,11 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
             />
         ))}
 
-        {/* Marker Temporário de Nova Quadra */}
         {newCourtPos && (
              <Marker position={[newCourtPos.lat, newCourtPos.lng]} icon={createCourtIcon(newCourtForm.isPaid)} />
         )}
-
       </MapContainer>
 
-      {/* --- OVERLAY: Status Badge --- */}
       {!isAddingCourt && (
         <div id="map-status-badge" className="absolute top-6 left-1/2 -translate-x-1/2 md:top-4 md:left-4 md:translate-x-0 z-[400] pointer-events-none">
             <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-neon/30 flex items-center gap-2.5 shadow-lg animate-fadeIn">
@@ -265,7 +247,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
         </div>
       )}
 
-      {/* --- OVERLAY: ADD COURT BUTTON (FAB) --- */}
       {!isAddingCourt && !newCourtPos && (
           <button 
             onClick={() => setIsAddingCourt(true)}
@@ -276,7 +257,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           </button>
       )}
 
-      {/* --- OVERLAY: ADD COURT BANNER (INSTRUCTION) --- */}
       {isAddingCourt && !newCourtPos && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-neon text-white shadow-2xl animate-bounce">
               <p className="font-bold text-sm">Toque no mapa onde fica a quadra 📍</p>
@@ -289,12 +269,10 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           </div>
       )}
 
-      {/* --- MODAL: CONFIRM NEW COURT --- */}
       {newCourtPos && (
           <div className="absolute bottom-0 left-0 right-0 p-4 md:p-8 z-[1000] flex justify-center items-end pointer-events-none">
               <div className="bg-pitch-950 border border-white/20 p-6 rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto animate-slideUp">
                   <h3 className="text-xl font-display font-bold text-white uppercase italic mb-4">Sinalizar Nova Quadra</h3>
-                  
                   <div className="space-y-4">
                       <div>
                           <label className="text-gray-400 text-[10px] font-bold uppercase mb-1 block">Nome do Local</label>
@@ -307,7 +285,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                               autoFocus
                           />
                       </div>
-
                       <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between">
                           <div>
                               <p className="text-sm font-bold text-white">Tipo de Acesso</p>
@@ -328,7 +305,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                               </button>
                           </div>
                       </div>
-
                       <div className="flex gap-3 pt-2">
                           <button 
                               onClick={() => { setNewCourtPos(null); setIsAddingCourt(false); }}
@@ -349,21 +325,16 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           </div>
       )}
 
-      {/* OVERLAY: Bottom Sheet Territory Details */}
       {selectedTerritory && (
         <div className="absolute bottom-20 left-2 right-2 md:bottom-6 md:left-6 md:right-auto md:w-96 z-[1000] animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
            <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5">
-               
-               {/* Close Button */}
                <button 
                   onClick={(e) => { e.stopPropagation(); setSelectedTerritory(null); }} 
                   className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-20"
                >
                  ✕
                </button>
-
                <div className="flex items-center gap-4 mb-5 relative z-10 pr-8">
-                   {/* Logo with status ring */}
                    <div className="relative">
                         <div className={`w-16 h-16 rounded-2xl bg-black border-2 p-1 shadow-lg ${selectedTerritory.ownerTeamId ? 'border-red-500 shadow-red-900/20' : 'border-neon shadow-neon/20'}`}>
                                 {teams.find(t => t.id === selectedTerritory.ownerTeamId)?.logoUrl ? (
@@ -372,9 +343,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                                     <div className="w-full h-full flex items-center justify-center text-2xl text-gray-600">🏳️</div>
                                 )}
                         </div>
-                        {selectedTerritory.ownerTeamId && <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 border-2 border-black rounded-full"></div>}
                    </div>
-
                    <div>
                        <h3 className="text-xl font-display font-bold text-white uppercase leading-tight mb-1">{selectedTerritory.name}</h3>
                        {selectedTerritory.ownerTeamId ? (
@@ -387,7 +356,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                        )}
                    </div>
                </div>
-
                <div className="grid grid-cols-2 gap-3 mb-5 relative z-10">
                    <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex flex-col items-center justify-center">
                        <p className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Valor</p>
@@ -400,7 +368,6 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                        </p>
                    </div>
                </div>
-               
                <button className={`w-full font-bold py-3.5 rounded-xl uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all relative z-10 ${
                    selectedTerritory.ownerTeamId 
                    ? 'bg-red-600 text-white shadow-red-900/30' 
@@ -408,35 +375,26 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                }`}>
                   {selectedTerritory.ownerTeamId ? '⚔️ Desafiar Dono' : '🚩 Reivindicar Agora'}
                </button>
-
-               {/* Decorative Gradient */}
                <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 pointer-events-none ${selectedTerritory.ownerTeamId ? 'bg-red-600' : 'bg-neon'}`}></div>
-
            </div>
         </div>
       )}
 
-      {/* OVERLAY: Bottom Sheet COURT Details */}
       {selectedCourt && (
         <div className="absolute bottom-20 left-2 right-2 md:bottom-6 md:left-6 md:right-auto md:w-96 z-[1000] animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
            <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5">
-               
-               {/* Close Button */}
                <button 
                   onClick={(e) => { e.stopPropagation(); setSelectedCourt(null); }} 
                   className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-20"
                >
                  ✕
                </button>
-
                <div className="flex items-center gap-4 mb-5 relative z-10 pr-8">
-                   {/* Logo with status ring */}
                    <div className="relative">
                         <div className={`w-16 h-16 rounded-2xl bg-black border-2 p-1 shadow-lg flex items-center justify-center ${selectedCourt.isPaid ? 'border-gold shadow-gold/20' : 'border-neon shadow-neon/20'}`}>
                             <span className="text-3xl">{selectedCourt.isPaid ? '💲' : '⚽'}</span>
                         </div>
                    </div>
-
                    <div>
                        <h3 className="text-xl font-display font-bold text-white uppercase leading-tight mb-1">{selectedCourt.name}</h3>
                        <div className="flex gap-2">
@@ -451,14 +409,10 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                        </div>
                    </div>
                </div>
-
-               {/* Address Info */}
                <div className="bg-black/40 rounded-xl p-3 border border-white/5 mb-4 relative z-10">
                    <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">Localização</p>
                    <p className="text-sm text-gray-300 font-medium leading-snug">{selectedCourt.address}</p>
                </div>
-
-               {/* Upcoming Games Badge */}
                {upcomingGamesForSelected.length > 0 && (
                    <div className="mb-4 bg-white/5 rounded-xl p-3 border border-white/5 relative z-10">
                        <p className="text-[9px] text-neon uppercase font-bold mb-2">📅 Próximos Jogos</p>
@@ -469,11 +423,9 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                                    <span className="text-gray-500">{new Date(g.date).toLocaleDateString()}</span>
                                </div>
                            ))}
-                           {upcomingGamesForSelected.length > 2 && <p className="text-[9px] text-gray-500 italic mt-1">+ {upcomingGamesForSelected.length - 2} outros</p>}
                        </div>
                    </div>
                )}
-               
                <a 
                    href={`https://www.google.com/maps/search/?api=1&query=${selectedCourt.lat},${selectedCourt.lng}`}
                    target="_blank"
@@ -485,10 +437,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                }`}>
                   🗺️ Navegar (GPS)
                </a>
-
-               {/* Decorative Gradient */}
                <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 pointer-events-none ${selectedCourt.isPaid ? 'bg-gold' : 'bg-neon'}`}></div>
-
            </div>
         </div>
       )}
