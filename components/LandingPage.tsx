@@ -279,9 +279,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                    </button>
               </div>
               
-              <p className="mt-16 text-gray-600 text-[10px] uppercase tracking-widest font-bold">
-                  FUT-DOMINATION © 2025 • Made for the beautiful game
-              </p>
+              <div className="mt-16 text-center">
+                  <p className="text-gray-600 text-[10px] uppercase tracking-widest font-bold">
+                      FUT-DOMINATION © 2025 • Made for the beautiful game
+                  </p>
+                  <p className="text-gray-500 text-[9px] uppercase tracking-widest mt-1 opacity-70">
+                      Desenvolvido por <strong className="text-neon">João Layon</strong> (Full Stack) • <span className="font-semibold text-white">DS Company</span> (Digital Solutions)
+                  </p>
+              </div>
           </div>
       </section>
     </div>

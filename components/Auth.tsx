@@ -168,6 +168,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </button>
         </div>
       </div>
+
+      <div className="absolute bottom-6 left-0 right-0 text-center opacity-60">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+              Developed by João Layon • DS Company (Digital Solutions)
+          </p>
+      </div>
     </div>
   );
 };
