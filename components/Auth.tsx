@@ -58,17 +58,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 } else {
                     setIsLoading(false);
                     // Erro genérico de "Não encontrado"
-                    setError('Email não encontrado. Verifique se digitou corretamente ou crie uma conta.');
+                    setError('Conta não encontrada. O banco de dados pode ter sido reiniciado. Por favor, crie a conta novamente.');
                 }
             } catch (dbError: any) {
                 // Captura erro específico do banco (ex: Connection Unavailable)
                 const errMsg = dbError?.message || JSON.stringify(dbError);
                 console.error("DB Login Error:", dbError);
+                
                 if (errMsg.includes("Connection unavailable") || errMsg.includes("fetch")) {
                      setIsLoading(false);
                      setError("Erro de Conexão com o Servidor. Tente novamente em instantes.");
                 } else {
-                     throw dbError; // Relança para o catch externo genérico
+                     setIsLoading(false);
+                     setError("Erro ao conectar. Tente recarregar a página.");
                 }
             }
         }
@@ -106,8 +108,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold break-words">
-              {error}
+            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg text-center font-bold break-words animate-pulse">
+              ⚠️ {error}
             </div>
           )}
 
@@ -151,10 +153,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <button 
             type="submit"
             disabled={isLoading}
-            className="w-full bg-neon text-pitch-950 font-bold py-3 rounded-xl hover:bg-pitch-500 transition-all shadow-lg shadow-neon/20 mt-6 flex justify-center"
+            className="w-full bg-neon text-pitch-950 font-bold py-3 rounded-xl hover:bg-pitch-500 transition-all shadow-lg shadow-neon/20 mt-6 flex justify-center uppercase tracking-widest"
           >
             {isLoading ? (
-               <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+               <div className="flex items-center gap-2">
+                   <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                   <span>Processando...</span>
+               </div>
             ) : (isRegistering ? 'Criar Conta' : 'Entrar')}
           </button>
         </form>

@@ -177,7 +177,7 @@ class DatabaseService {
 
         console.log("✅ Database Schema Synced with SQLite Cloud");
     } catch (error) {
-        console.error("❌ Schema Sync Failed:", error);
+        console.error("❌ Schema Sync Failed. Check Connection.", error);
     }
   }
 
@@ -411,8 +411,8 @@ class DatabaseService {
           }
           return null;
       } catch (e) {
-          console.error(e);
-          return null;
+          console.error("Login Error:", e);
+          throw e;
       }
   }
 
