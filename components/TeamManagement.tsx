@@ -39,6 +39,37 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
     await dbService.updateTeamInfo(localTeam.id, newName, localTeam.logoUrl);
   };
 
+  const handlePromotePlayer = async (e: React.MouseEvent, playerId: string) => {
+      e.stopPropagation();
+      if (!window.confirm("Promover este jogador a Dono? Ele terá acesso total.")) return;
+      
+      const res = await dbService.promotePlayerToOwner(playerId, localTeam.id);
+      if (res.success) {
+          alert(res.message);
+          setLocalTeam(prev => ({
+              ...prev,
+              players: prev.players.map(p => p.id === playerId ? {...p, role: UserRole.OWNER} : p)
+          }));
+      } else {
+          alert(res.message);
+      }
+  };
+
+  const handleRemovePlayer = async (e: React.MouseEvent, playerId: string) => {
+      e.stopPropagation();
+      if (!window.confirm("Tem certeza que deseja remover este jogador do time?")) return;
+
+      const res = await dbService.removePlayerFromTeam(playerId);
+      if (res.success) {
+          setLocalTeam(prev => ({
+              ...prev,
+              players: prev.players.filter(p => p.id !== playerId)
+          }));
+      } else {
+          alert("Erro ao remover jogador.");
+      }
+  };
+
   return (
     <div className="space-y-8 pb-24">
       
@@ -143,7 +174,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
               <h3 className="text-xl font-display font-bold text-white uppercase italic tracking-wide">Elenco</h3>
               {isOwner && (
                   <button className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors">
-                      + Adicionar Jogador
+                      + Adicionar Jogador (Via Email)
                   </button>
               )}
           </div>
@@ -153,7 +184,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                   <div 
                     key={player.id} 
                     onClick={() => onViewPlayer && onViewPlayer(player)} // CLICK HANDLER ADDED
-                    className="bg-white/5 border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-neon/30 hover:bg-white/10 transition-all cursor-pointer group"
+                    className="bg-white/5 border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-neon/30 hover:bg-white/10 transition-all cursor-pointer group relative"
                   >
                       <div className="relative">
                            <img src={player.avatarUrl} className="w-12 h-12 rounded-full object-cover bg-gray-800" />
@@ -161,14 +192,28 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                                <div className="absolute -top-1 -right-1 text-xs">👑</div>
                            )}
                       </div>
-                      <div>
+                      <div className="flex-1">
                           <p className="font-bold text-white text-sm group-hover:text-neon transition-colors">{player.name}</p>
                           <p className="text-xs text-gray-500 font-mono">{player.position} • Camisa {player.shirtNumber || '-'}</p>
                       </div>
-                      {player.stats && (
-                          <div className="ml-auto text-right">
-                              <span className="block font-bold text-neon text-sm">{player.stats.goals} Gols</span>
-                              <span className="text-[10px] text-gray-500">{player.stats.matchesPlayed} Jogos</span>
+                      
+                      {/* Admin Actions */}
+                      {isOwner && player.role !== UserRole.OWNER && (
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={(e) => handlePromotePlayer(e, player.id)}
+                                title="Promover a Dono"
+                                className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center hover:bg-gold hover:text-black transition-colors"
+                              >
+                                  👑
+                              </button>
+                              <button 
+                                onClick={(e) => handleRemovePlayer(e, player.id)}
+                                title="Remover do Time"
+                                className="w-8 h-8 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
+                              >
+                                  ✕
+                              </button>
                           </div>
                       )}
                   </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigation } from './components/Navigation';
 import { TerritoryMap } from './components/TerritoryMap';
 import { Feed } from './components/Feed';
@@ -13,14 +13,14 @@ import { Rankings } from './components/Rankings';
 import { TransferMarket } from './components/TransferMarket';
 import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
-import { LandingPage } from './components/LandingPage'; // NEW
+import { LandingPage } from './components/LandingPage'; 
 import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory, Court, PickupGame } from './types';
 import { dbService } from './services/database';
 
 const App: React.FC = () => {
   const [activeUser, setActiveUser] = useState<User | null>(null);
-  const [showLanding, setShowLanding] = useState(true); // Control landing page visibility
+  const [showLanding, setShowLanding] = useState(true); 
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -28,7 +28,7 @@ const App: React.FC = () => {
   
   // --- PLAYER VIEW STATE ---
   const [viewingPlayer, setViewingPlayer] = useState<User | null>(null);
-  const [playerLiked, setPlayerLiked] = useState(false); // Local state for like animation
+  const [playerLiked, setPlayerLiked] = useState(false); 
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -43,6 +43,9 @@ const App: React.FC = () => {
   const [courts, setCourts] = useState<Court[]>([]);
   const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
 
+  // Polling Interval Ref
+  const intervalRef = useRef<number | null>(null);
+
   // --- INITIALIZATION & SESSION ---
   useEffect(() => {
     const initApp = async () => {
@@ -51,19 +54,7 @@ const App: React.FC = () => {
             await dbService.initSchema();
 
             // 2. Fetch Real Data
-            const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
-                dbService.getTeams(),
-                dbService.getMatches(),
-                dbService.getTerritories(),
-                dbService.getCourts(),
-                dbService.getPickupGames()
-            ]);
-
-            setTeams(fetchedTeams);
-            setMatches(fetchedMatches);
-            setTerritories(fetchedTerritories);
-            setCourts(fetchedCourts);
-            setPickupGames(fetchedPickup);
+            await refreshData();
 
             // 3. Restore Session
             const storedUserId = localStorage.getItem('fut_dom_user_id');
@@ -72,7 +63,7 @@ const App: React.FC = () => {
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
-                    setShowLanding(false); // Skip landing if logged in
+                    setShowLanding(false); 
                     checkNotifications(user.id);
                     if (user.role === UserRole.OWNER && user.onboardingCompleted) {
                         setCurrentTab('team');
@@ -91,6 +82,16 @@ const App: React.FC = () => {
     };
 
     initApp();
+
+    // --- AUTO-UPDATE POLLING (SIMULATES REAL-TIME) ---
+    // Polls every 15 seconds to check for new data
+    intervalRef.current = window.setInterval(() => {
+        refreshData();
+    }, 15000);
+
+    return () => {
+        if (intervalRef.current) window.clearInterval(intervalRef.current);
+    };
   }, []);
 
   const checkTutorialStatus = () => {
@@ -124,9 +125,9 @@ const App: React.FC = () => {
       setCourts(fetchedCourts);
       setPickupGames(fetchedPickup);
       
+      // Also update notification status silently
       if(activeUser) {
-          const updatedUser = await dbService.getUserById(activeUser.id);
-          if(updatedUser) setActiveUser(updatedUser);
+          // Note: we don't update activeUser full object here to avoid UI flickering, just notifications
           checkNotifications(activeUser.id);
       }
   };
@@ -148,7 +149,7 @@ const App: React.FC = () => {
     localStorage.removeItem('fut_dom_user_id');
     setActiveUser(null);
     setCurrentTab('map');
-    setShowLanding(true); // Return to landing on logout
+    setShowLanding(true); 
   };
 
   const handleUserUpdate = (updatedUser: User) => {
@@ -167,10 +168,9 @@ const App: React.FC = () => {
       checkTutorialStatus();
   };
 
-  // Callback to view a player's profile
   const handleViewPlayer = (user: User) => {
       setViewingPlayer(user);
-      setPlayerLiked(false); // Reset
+      setPlayerLiked(false); 
   };
 
   const handleLikePlayer = async () => {
@@ -179,11 +179,9 @@ const App: React.FC = () => {
       const success = await dbService.likePlayer(viewingPlayer.id, activeUser.id, activeUser.name);
       if (success) {
           setPlayerLiked(true);
-          // Update local view count optimistically
           setViewingPlayer(prev => prev ? {...prev, likes: prev.likes + 1} : null);
       } else {
-          // alert("Você já curtiu este perfil!");
-          setPlayerLiked(true); // Treat as visual success even if DB reject due to duplicate
+          setPlayerLiked(true); 
       }
   };
 
@@ -245,19 +243,16 @@ const App: React.FC = () => {
       );
   }
 
-  // --- LANDING PAGE (First Screen) ---
   if (!activeUser && showLanding) {
       return <LandingPage onGetStarted={() => setShowLanding(false)} />;
   }
 
-  // --- AUTH SCREEN ---
   if (!activeUser) {
     return (
       <Auth onLogin={handleLogin} />
     );
   }
 
-  // --- ONBOARDING ---
   if (!activeUser.onboardingCompleted) {
       return (
           <Onboarding user={activeUser} onComplete={handleOnboardingComplete} />
@@ -384,7 +379,7 @@ const App: React.FC = () => {
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setViewingPlayer(null)}>
               <div 
                   className="w-full max-w-sm relative" 
-                  onClick={e => e.stopPropagation()} // Prevent close on card click
+                  onClick={e => e.stopPropagation()} 
               >
                   <button 
                       onClick={() => setViewingPlayer(null)}

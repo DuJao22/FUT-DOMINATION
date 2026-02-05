@@ -47,6 +47,21 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
       }
   };
 
+  const handleLeaveTeam = async () => {
+      if (!user.teamId) return;
+      if (!window.confirm("Tem certeza que deseja sair do seu time atual? Você virará um agente livre.")) return;
+
+      const res = await dbService.removePlayerFromTeam(user.id);
+      if (res.success) {
+          alert("Você saiu do time.");
+          if (onUpdateUser) {
+              onUpdateUser({ ...user, teamId: undefined, role: UserRole.FAN });
+          }
+      } else {
+          alert("Erro ao sair do time.");
+      }
+  };
+
   return (
     <div className="space-y-8 pb-24 relative">
       
@@ -163,6 +178,20 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
                     {user.name}
                  </h2>
                  <p className="text-center text-gray-400 text-xs uppercase tracking-widest mb-4 relative z-10">{user.bio || "Sem biografia..."}</p>
+                 
+                 {user.teamId ? (
+                     <div className="text-center mb-4">
+                         <button onClick={handleLeaveTeam} className="text-[10px] text-red-500 hover:text-white uppercase font-bold border border-red-500/30 px-3 py-1 rounded hover:bg-red-900 transition-colors">
+                             Pedir Demissão (Sair do Time)
+                         </button>
+                     </div>
+                 ) : (
+                     <div className="text-center mb-4">
+                         <span className="text-[10px] text-neon uppercase font-bold border border-neon/30 px-3 py-1 rounded">
+                             Agente Livre
+                         </span>
+                     </div>
+                 )}
                  
                  <div className="grid grid-cols-3 gap-2 text-center relative z-10">
                      <div className="p-2 rounded-lg bg-white/5 border border-white/5">

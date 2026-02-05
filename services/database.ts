@@ -70,18 +70,18 @@ class DatabaseService {
           const tables = [
               'notifications',
               'pickup_games',
-              'court_ratings', // New
+              'court_ratings', 
               'courts',
               'matches',
               'territories',
               'teams',
               'user_follows',
-              'player_likes', // New
+              'player_likes', 
               'user_badges',
               'player_stats',
               'users',
-              'posts',         // Legacy tables just in case
-              'post_comments'  // Legacy tables just in case
+              'posts',         
+              'post_comments' 
           ];
 
           for (const table of tables) {
@@ -124,7 +124,7 @@ class DatabaseService {
                 position TEXT,
                 shirt_number INTEGER,
                 onboarding_completed INTEGER DEFAULT 0,
-                likes INTEGER DEFAULT 0, -- NEW: Profile Likes
+                likes INTEGER DEFAULT 0, 
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -577,6 +577,32 @@ class DatabaseService {
           console.error(e);
           return { success: false };
       }
+  }
+
+  // --- TEAM MANAGEMENT (NEW) ---
+
+  async promotePlayerToOwner(userId: string, teamId: string): Promise<{success: boolean, message: string}> {
+      try {
+          // Check limit
+          const owners = await this.executeQuery(`SELECT count(*) as count FROM users WHERE team_id = '${teamId}' AND role = 'OWNER'`);
+          const count = owners[0]?.count || 0;
+          
+          if (count >= 5) {
+              return { success: false, message: 'Limite de 5 donos atingido.' };
+          }
+
+          await this.executeQuery(`UPDATE users SET role = 'OWNER' WHERE id = '${userId}'`);
+          return { success: true, message: 'Jogador promovido a Dono.' };
+      } catch (e) {
+          return { success: false, message: 'Erro ao promover.' };
+      }
+  }
+
+  async removePlayerFromTeam(userId: string): Promise<{success: boolean}> {
+      try {
+          await this.executeQuery(`UPDATE users SET team_id = NULL, role = 'FAN' WHERE id = '${userId}'`);
+          return { success: true };
+      } catch (e) { return { success: false }; }
   }
 
   // --- INTERACTION ACTIONS (Likes & Ratings) ---
