@@ -231,6 +231,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                 const slotsLeft = game.maxPlayers - game.confirmedPlayers.length;
                                 const percent = (game.confirmedPlayers.length / game.maxPlayers) * 100;
                                 const dateObj = new Date(game.date);
+                                const hasPlayers = game.confirmedPlayers.length > 0;
                                 
                                 return (
                                     <div key={game.id} className="relative group overflow-hidden bg-pitch-950 border border-white/10 rounded-[2rem] hover:border-neon/40 transition-all duration-300 shadow-2xl hover:shadow-[0_0_30px_rgba(57,255,20,0.1)]">
@@ -290,18 +291,20 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="text-right">
+                                                {/* Clickable Progress Area to view Attendees */}
+                                                <div 
+                                                    className={`text-right ${hasPlayers ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                                                    onClick={() => hasPlayers && handleViewList(game)}
+                                                    title={hasPlayers ? "Ver lista de jogadores" : "Ninguém confirmado ainda"}
+                                                >
                                                     <div className="flex justify-end items-center gap-2 mb-1">
                                                         <p className="text-[9px] text-gray-500 uppercase font-bold">
                                                             {slotsLeft === 0 ? 'Lotado' : `${slotsLeft} Vagas`}
                                                         </p>
-                                                        {game.confirmedPlayers.length > 0 && (
-                                                            <button 
-                                                                onClick={() => handleViewList(game)} 
-                                                                className="text-[9px] text-neon uppercase font-bold hover:underline bg-neon/10 px-1.5 py-0.5 rounded"
-                                                            >
-                                                                Ver Lista
-                                                            </button>
+                                                        {hasPlayers && (
+                                                            <div className="text-[9px] text-neon uppercase font-bold bg-neon/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                                <span>👥</span> Ver Lista
+                                                            </div>
                                                         )}
                                                     </div>
                                                     <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
@@ -362,6 +365,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                         <Marker 
                                             key={court.id} 
                                             position={[court.lat, court.lng]} 
+                                            // @ts-ignore
                                             eventHandlers={{ click: () => selectCourtForGame(court) }}
                                         />
                                     ))}
