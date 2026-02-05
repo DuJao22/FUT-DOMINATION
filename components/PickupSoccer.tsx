@@ -399,7 +399,9 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
 
             {/* CREATE TAB */}
             {activeTab === 'create' && (
-                <div className="flex flex-col h-[calc(100vh-180px)] md:h-[calc(100vh-150px)] bg-pitch-900 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-[slideUp_0.4s_ease-out]">
+                // Changed from 100vh calculation to 100dvh to handle mobile keyboard
+                // Using 100dvh (dynamic viewport height) ensures the container respects the keyboard.
+                <div className="flex flex-col h-[calc(100dvh-180px)] md:h-[calc(100vh-150px)] bg-pitch-900 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-[slideUp_0.4s_ease-out]">
                     {/* Step Indicator */}
                     <div className="flex bg-black/50 backdrop-blur-sm border-b border-white/10 flex-shrink-0">
                         <div className={`flex-1 text-center text-xs font-bold py-4 uppercase tracking-widest transition-colors ${formStep === 1 ? 'text-neon bg-white/5' : 'text-gray-600'}`}>1. Onde?</div>
@@ -408,8 +410,8 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
 
                     {formStep === 1 && (
                         <div className="flex flex-col h-full overflow-hidden relative">
-                            {/* Map - Responsive Height: 45% on Mobile, Flex on Desktop */}
-                            <div className="h-[45%] md:flex-1 relative z-0 w-full flex-shrink-0">
+                            {/* Map - Reduced to 30% on mobile to allow more space for the form when keyboard is open */}
+                            <div className="h-[30%] md:flex-1 relative z-0 w-full flex-shrink-0 transition-all duration-300">
                                 <MapContainer center={[-23.5505, -46.6333]} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
                                     {/* Show Existing Courts Markers */}
@@ -438,9 +440,10 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                 </div>
                             </div>
 
-                            {/* Form Container - Scrollable on small screens if needed */}
-                            <div className="flex-1 bg-pitch-950 border-t border-neon/20 z-10 rounded-t-3xl -mt-6 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col">
-                                <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                            {/* Form Container - Using flex-1 to fill remaining dynamic space */}
+                            <div className="flex-1 bg-pitch-950 border-t border-neon/20 z-10 rounded-t-3xl -mt-6 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col min-h-0">
+                                {/* Scrollable content area */}
+                                <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                                     {/* CEP SEARCH */}
                                     <div>
                                         <label className="text-neon text-[10px] font-bold uppercase ml-1 mb-1 block">Buscar por CEP (Auto-Mapa)</label>
@@ -484,7 +487,8 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                     )}
                                 </div>
 
-                                <div className="p-4 pt-0 mt-auto bg-pitch-950">
+                                {/* Fixed footer button - flex-shrink-0 ensures it never shrinks */}
+                                <div className="p-4 pt-2 border-t border-white/5 bg-pitch-950 z-20 flex-shrink-0">
                                     <button 
                                         onClick={() => setFormStep(2)}
                                         disabled={!newGameLocation}
