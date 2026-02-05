@@ -1,3 +1,4 @@
+
 # ⚽ FUT-DOMINATION (SaaS Edition)
 
 Uma plataforma social de dominação de territórios para times de futebol amador.

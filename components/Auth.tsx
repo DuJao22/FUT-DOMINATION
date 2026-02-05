@@ -26,8 +26,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
         if (isRegistering) {
             // --- REGISTRATION LOGIC (DB) ---
-            
-            // 1. Create new Common User (FAN)
             const newUser: User = {
                 id: `u-${Date.now()}`,
                 name: cleanName,
@@ -43,25 +41,35 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onboardingCompleted: false
             };
 
-            // 2. Call DB Service
             await dbService.registerUser(newUser, password);
-            
-            // 3. Log in automatically after register
             setIsLoading(false);
             onLogin(newUser);
 
         } else {
             // --- LOGIN LOGIC (DB) ---
             console.log("Tentando login com:", cleanEmail);
-            const user = await dbService.loginUser(cleanEmail);
             
-            if (user) {
-                // In a real app, verify password hash here. 
-                setIsLoading(false);
-                onLogin(user);
-            } else {
-                setIsLoading(false);
-                setError('Email não encontrado. Verifique se digitou corretamente ou crie uma conta.');
+            try {
+                const user = await dbService.loginUser(cleanEmail);
+                
+                if (user) {
+                    setIsLoading(false);
+                    onLogin(user);
+                } else {
+                    setIsLoading(false);
+                    // Erro genérico de "Não encontrado"
+                    setError('Email não encontrado. Verifique se digitou corretamente ou crie uma conta.');
+                }
+            } catch (dbError: any) {
+                // Captura erro específico do banco (ex: Connection Unavailable)
+                const errMsg = dbError?.message || JSON.stringify(dbError);
+                console.error("DB Login Error:", dbError);
+                if (errMsg.includes("Connection unavailable") || errMsg.includes("fetch")) {
+                     setIsLoading(false);
+                     setError("Erro de Conexão com o Servidor. Tente novamente em instantes.");
+                } else {
+                     throw dbError; // Relança para o catch externo genérico
+                }
             }
         }
     } catch (err: any) {
@@ -70,14 +78,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         
         const errorMsg = err.message || JSON.stringify(err);
 
-        // Detailed error for common SQLiteCloud issues
         if (errorMsg.includes('UNIQUE constraint failed')) {
              setError('Este email já está cadastrado. Tente fazer login.');
-        } else if (errorMsg.includes('Network Error') || errorMsg.includes('fetch')) {
-             setError('Erro de conexão com o servidor. Verifique sua internet.');
+        } else if (errorMsg.includes('Network Error') || errorMsg.includes('fetch') || errorMsg.includes('Connection unavailable')) {
+             setError('Erro de conexão com o servidor. O banco de dados pode estar reiniciando.');
         } else {
-             // Show actual DB error
-             setError(`Erro no Banco de Dados: ${errorMsg}`);
+             setError(`Erro no Sistema: ${errorMsg}`);
         }
     }
   };

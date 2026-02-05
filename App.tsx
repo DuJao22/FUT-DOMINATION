@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navigation } from './components/Navigation';
 import { TerritoryMap } from './components/TerritoryMap';
-import { GenAIStudio } from './components/GenAIStudio';
 import { Feed } from './components/Feed';
 import { Auth } from './components/Auth';
 import { Onboarding } from './components/Onboarding';
@@ -13,13 +12,15 @@ import { Profile } from './components/Profile';
 import { Rankings } from './components/Rankings';
 import { TransferMarket } from './components/TransferMarket';
 import { NotificationsModal } from './components/NotificationsModal';
-import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay'; // NEW
+import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
+import { LandingPage } from './components/LandingPage'; // NEW
 import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory, Court, PickupGame } from './types';
 import { dbService } from './services/database';
 
 const App: React.FC = () => {
   const [activeUser, setActiveUser] = useState<User | null>(null);
+  const [showLanding, setShowLanding] = useState(true); // Control landing page visibility
   const [currentTab, setCurrentTab] = useState('map');
   const [showMatchLogger, setShowMatchLogger] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -42,7 +43,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
         try {
-            // 1. Initialize Database Schema (Create tables if new)
+            // 1. Initialize Database Schema
             await dbService.initSchema();
 
             // 2. Fetch Real Data
@@ -67,11 +68,11 @@ const App: React.FC = () => {
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
-                    checkNotifications(user.id); // Check notifs on load
+                    setShowLanding(false); // Skip landing if logged in
+                    checkNotifications(user.id);
                     if (user.role === UserRole.OWNER && user.onboardingCompleted) {
                         setCurrentTab('team');
                     }
-                    // Check Tutorial
                     checkTutorialStatus();
                 } else {
                     localStorage.removeItem('fut_dom_user_id');
@@ -91,7 +92,6 @@ const App: React.FC = () => {
   const checkTutorialStatus = () => {
       const seen = localStorage.getItem('fut_dom_tutorial_seen');
       if (!seen) {
-          // Pequeno delay para garantir que a UI carregou
           setTimeout(() => setShowTutorial(true), 1500);
       }
   };
@@ -106,7 +106,6 @@ const App: React.FC = () => {
       setHasUnread(notifs.some(n => !n.read));
   };
 
-  // Refresh data helper
   const refreshData = async () => {
       const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
         dbService.getTeams(),
@@ -121,7 +120,6 @@ const App: React.FC = () => {
       setCourts(fetchedCourts);
       setPickupGames(fetchedPickup);
       
-      // Update active user info if needed
       if(activeUser) {
           const updatedUser = await dbService.getUserById(activeUser.id);
           if(updatedUser) setActiveUser(updatedUser);
@@ -132,6 +130,7 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     localStorage.setItem('fut_dom_user_id', user.id);
     setActiveUser(user);
+    setShowLanding(false);
     refreshData();
     if (user.role === UserRole.OWNER && user.onboardingCompleted) {
       setCurrentTab('team');
@@ -145,6 +144,7 @@ const App: React.FC = () => {
     localStorage.removeItem('fut_dom_user_id');
     setActiveUser(null);
     setCurrentTab('map');
+    setShowLanding(true); // Return to landing on logout
   };
 
   const handleUserUpdate = (updatedUser: User) => {
@@ -152,10 +152,9 @@ const App: React.FC = () => {
     refreshData();
   };
 
-  // --- ONBOARDING COMPLETION HANDLER ---
   const handleOnboardingComplete = (finalUser: User) => {
       setActiveUser(finalUser);
-      refreshData(); // Refresh to see new team if created
+      refreshData();
       if (finalUser.role === UserRole.OWNER) {
           setCurrentTab('team');
       } else {
@@ -164,7 +163,6 @@ const App: React.FC = () => {
       checkTutorialStatus();
   };
 
-  // --- TUTORIAL STEPS DEFINITION ---
   const tutorialSteps: TutorialStep[] = [
       {
           targetId: 'welcome-center', 
@@ -176,7 +174,7 @@ const App: React.FC = () => {
           targetId: 'mobile-menu-btn',
           title: 'Menu Principal',
           content: 'Acesse Peladas, Mercado, Rankings e gerencie seu Time por aqui.',
-          position: 'bottom' // Ajusta automaticamente se desktop/mobile
+          position: 'bottom'
       },
       {
           targetId: 'map-status-badge',
@@ -223,22 +221,25 @@ const App: React.FC = () => {
       );
   }
 
+  // --- LANDING PAGE (First Screen) ---
+  if (!activeUser && showLanding) {
+      return <LandingPage onGetStarted={() => setShowLanding(false)} />;
+  }
+
+  // --- AUTH SCREEN ---
   if (!activeUser) {
     return (
-      <>
-        <Auth onLogin={handleLogin} />
-      </>
+      <Auth onLogin={handleLogin} />
     );
   }
 
-  // --- MANDATORY ONBOARDING CHECK ---
+  // --- ONBOARDING ---
   if (!activeUser.onboardingCompleted) {
       return (
           <Onboarding user={activeUser} onComplete={handleOnboardingComplete} />
       );
   }
 
-  // Find the team associated with the user
   const myTeam = teams.find(t => t.id === activeUser.teamId) || {
     id: 'temp', name: 'Sem Time', logoUrl: '', wins:0, losses:0, draws:0, players:[], territoryColor:'#ccc', category: 'Society', ownerId:'' 
   } as Team;
@@ -248,7 +249,6 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-pitch-950 bg-mesh bg-fixed font-sans text-gray-100 overflow-x-hidden selection:bg-neon selection:text-black">
       
-      {/* TUTORIAL OVERLAY */}
       {showTutorial && (
           <TutorialOverlay 
               steps={tutorialSteps} 
@@ -264,10 +264,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Main Content Area - md:ml-64 ensures space for fixed sidebar on desktop */}
       <main className="md:ml-64 w-full min-h-screen relative pb-8 transition-all duration-300">
-        
-        {/* Header with Title and Notification Bell */}
         {currentTab !== 'map' && (
           <header className="px-6 pt-16 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
@@ -275,7 +272,6 @@ const App: React.FC = () => {
                 {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
                 {currentTab === 'calendar' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Match Center</span>}
                 {currentTab === 'pickup' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500">Pelada Local</span>}
-                {currentTab === 'studio' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Estúdio Criativo</span>}
                 {currentTab === 'team' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Meu Elenco</span>}
                 {currentTab === 'market' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">Mercado</span>}
                 {currentTab === 'profile' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold to-yellow-600">Modo Carreira</span>}
@@ -284,7 +280,6 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-4">
-                {/* Notification Bell */}
                 <button 
                   id="header-notifs-btn"
                   onClick={() => setShowNotifications(true)}
@@ -294,7 +289,6 @@ const App: React.FC = () => {
                     {hasUnread && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black"></div>}
                 </button>
 
-                {/* Profile Pic */}
                 <div id="header-profile-btn" className="w-10 h-10 rounded-full border-2 border-neon p-0.5 shadow-neon cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
                    <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
                 </div>
@@ -305,13 +299,8 @@ const App: React.FC = () => {
         <div className="px-0 md:px-8 max-w-7xl mx-auto h-full md:mt-4">
           
           {currentTab === 'map' && (
-             // Usando fixed inset-0 para garantir tela cheia no mobile sem scrolls indesejados
              <div className="fixed inset-0 md:static md:h-auto md:w-full z-0 bg-pitch-950">
-                 
-                 {/* Mobile Map Gradient Overlay for better UI visibility */}
                  <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-10 md:hidden"></div>
-
-                 {/* Map Header Controls - Fixed to top right */}
                  <div className="fixed top-4 right-4 z-20 md:hidden pointer-events-auto flex gap-2">
                         <button id="header-notifs-btn" onClick={() => setShowNotifications(true)} className="p-2.5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 relative shadow-lg active:scale-95 transition-transform">
                              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
@@ -322,7 +311,6 @@ const App: React.FC = () => {
                         </div>
                  </div>
                  
-                 {/* Desktop Header Actions */}
                  {userRole === UserRole.OWNER && (
                     <div className="hidden md:flex justify-end mb-4 relative z-10">
                         <button 
@@ -333,7 +321,6 @@ const App: React.FC = () => {
                         </button>
                     </div>
                  )}
-                 {/* Mobile Floating Action Button */}
                  {userRole === UserRole.OWNER && (
                     <div className="fixed top-20 right-4 z-20 md:hidden pointer-events-auto">
                         <button 
@@ -359,18 +346,15 @@ const App: React.FC = () => {
           <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
             {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} />}
             {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} />}
-            {currentTab === 'studio' && <GenAIStudio />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} />}
           </div>
-
         </div>
       </main>
 
-      {/* MODALS */}
       {showMatchLogger && userRole === UserRole.OWNER && (
           <MatchLogger 
             onClose={() => { setShowMatchLogger(false); refreshData(); }} 
