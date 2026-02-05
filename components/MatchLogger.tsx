@@ -601,35 +601,36 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
                     )}
                 </div>
             )}
+            
+        </div>
 
-            {/* Footer Actions */}
-            <div className="p-4 border-t border-pitch-800 bg-pitch-950 flex gap-3 z-50">
-                {step === 'match_details' ? (
-                    <>
-                        <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
-                        <button 
-                            onClick={handleSaveMatch}
-                            disabled={isSaving}
-                            className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
-                        >
-                            {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Finalizar Jogo')}
-                        </button>
-                    </>
-                ) : (
-                    <button type="submit" form="court-form" className="w-full bg-neon text-black font-bold py-4 rounded-xl shadow-neon hidden">Hidden Submit</button>
-                )}
-                 {/* Dynamic Buttons for step 1 & 2 are handled inside their blocks or by this footer generically if I restructure, but keeping logic consistent with previous file for simplicity */}
-                 {(step === 'register_court') && (
-                     <>
-                        <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
-                        <button type="submit" form="court-form" disabled={isSaving} className="flex-1 bg-neon text-black font-bold py-4 rounded-xl shadow-neon">Salvar Local</button>
-                     </>
-                 )}
-                 {step === 'select_court' && (
-                     <button onClick={onClose} className="w-full text-gray-500 py-4 font-bold">Cancelar</button>
-                 )}
-            </div>
+        {/* Footer Actions */}
+        <div className="p-4 border-t border-pitch-800 bg-pitch-950 flex gap-3 z-50">
+            
+            {step === 'select_court' && (
+                <button onClick={onClose} className="w-full text-gray-500 py-4 font-bold hover:text-white transition-colors">Cancelar</button>
+            )}
 
+            {step === 'register_court' && (
+                <>
+                   <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
+                   <button type="submit" form="court-form" disabled={isSaving} className="flex-1 bg-neon text-black font-bold py-4 rounded-xl shadow-neon">Salvar Local</button>
+                </>
+            )}
+
+            {step === 'match_details' && (
+                <>
+                    <button onClick={() => setStep('select_court')} className="w-14 bg-white/10 text-white rounded-xl hover:bg-white/20">←</button>
+                    <button 
+                        onClick={handleSaveMatch}
+                        disabled={isSaving}
+                        className="flex-1 bg-neon text-black font-bold py-4 rounded-xl hover:scale-[1.02] shadow-neon uppercase tracking-wide"
+                    >
+                        {isSaving ? 'Processando...' : (matchMode === 'schedule' ? '📅 Enviar Convite' : '📢 Finalizar Jogo')}
+                    </button>
+                </>
+            )}
+        </div>
       </div>
     </div>
   );

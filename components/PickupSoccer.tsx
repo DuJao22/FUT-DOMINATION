@@ -302,7 +302,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                                             {slotsLeft === 0 ? 'Lotado' : `${slotsLeft} Vagas`}
                                                         </p>
                                                         {hasPlayers && (
-                                                            <div className="text-[9px] text-neon uppercase font-bold bg-neon/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                            <div className="text-[9px] text-neon uppercase font-bold bg-neon/10 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-neon hover:text-black transition-colors">
                                                                 <span>👥</span> Ver Lista
                                                             </div>
                                                         )}
@@ -593,7 +593,8 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
             {/* PLAYER LIST MODAL */}
             {viewingAttendees && (
                 <div className="fixed inset-0 bg-black/90 z-[2500] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
-                    <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[70vh]">
+                    <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[70vh] relative">
+                        {/* Header */}
                         <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/50 rounded-t-2xl">
                             <div className="truncate pr-4">
                                 <h3 className="text-white font-bold uppercase tracking-wide truncate">{attendeesGameTitle}</h3>
@@ -602,6 +603,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                             <button onClick={() => setViewingAttendees(null)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/10">✕</button>
                         </div>
                         
+                        {/* List */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                             {viewingAttendees.length === 0 ? (
                                 <p className="text-gray-500 text-center py-4 text-sm italic">Ninguém confirmou presença ainda.</p>
@@ -609,13 +611,17 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                 viewingAttendees.map(user => (
                                     <div 
                                         key={user.id} 
-                                        onClick={() => onViewPlayer && onViewPlayer(user)} // CLICK HANDLER ADDED
-                                        className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+                                        onClick={() => onViewPlayer && onViewPlayer(user)} // CLICK TO VIEW PROFILE
+                                        className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 hover:border-neon/30 cursor-pointer transition-all group"
+                                        title="Clique para ver perfil"
                                     >
-                                        <img src={user.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
+                                        <div className="relative">
+                                            <img src={user.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800 border border-white/10 group-hover:border-neon" />
+                                            {user.role === UserRole.OWNER && <span className="absolute -top-1 -right-1 text-[10px]">👑</span>}
+                                        </div>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-white font-bold text-sm">{user.name}</span>
+                                                <span className="text-white font-bold text-sm group-hover:text-neon transition-colors">{user.name}</span>
                                                 {user.role === UserRole.OWNER && <span className="text-[8px] bg-gold text-black px-1 rounded font-bold">DONO</span>}
                                             </div>
                                             <p className="text-[10px] text-gray-400 uppercase font-mono">{user.position || 'Jogador'}</p>
@@ -626,6 +632,9 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                                 <span className="text-[8px] text-gray-500 uppercase">OVR</span>
                                             </div>
                                         )}
+                                        <div className="text-gray-500 group-hover:text-white transition-colors">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                        </div>
                                     </div>
                                 ))
                             )}
