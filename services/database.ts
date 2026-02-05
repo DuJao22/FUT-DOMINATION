@@ -21,6 +21,49 @@ class DatabaseService {
     this.db = new Database(connectionString);
   }
 
+  // --- HARD RESET (DEV ONLY) ---
+  async hardReset(): Promise<boolean> {
+      try {
+          console.warn("⚠️ INICIANDO RESET COMPLETO DO BANCO DE DADOS...");
+          
+          // 1. Disable FK checks to allow dropping tables in any order
+          await this.db.sql('PRAGMA foreign_keys = OFF;');
+
+          // 2. Drop ALL Tables
+          const tables = [
+              'notifications',
+              'pickup_games',
+              'courts',
+              'matches',
+              'territories',
+              'teams',
+              'user_follows',
+              'user_badges',
+              'player_stats',
+              'users',
+              'posts',         // Legacy tables just in case
+              'post_comments'  // Legacy tables just in case
+          ];
+
+          for (const table of tables) {
+              await this.db.sql(`DROP TABLE IF EXISTS ${table};`);
+          }
+
+          // 3. Re-enable FK checks
+          await this.db.sql('PRAGMA foreign_keys = ON;');
+
+          console.log("✅ Tabelas removidas. Recriando Schema...");
+
+          // 4. Re-run init to create fresh tables
+          await this.initSchema();
+          
+          return true;
+      } catch (e) {
+          console.error("❌ Falha no Hard Reset:", e);
+          return false;
+      }
+  }
+
   // --- INITIALIZATION ---
 
   async initSchema(): Promise<void> {

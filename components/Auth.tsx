@@ -90,6 +90,20 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
+  const handleHardReset = async () => {
+      if (window.confirm("⚠️ PERIGO: Isso apagará TODOS os usuários, times e jogos do banco de dados na nuvem.\n\nTem certeza absoluta?")) {
+          setIsLoading(true);
+          const success = await dbService.hardReset();
+          if (success) {
+              alert("Banco de dados resetado com sucesso! Você pode criar sua conta agora.");
+              setError('');
+          } else {
+              alert("Erro ao resetar. Verifique o console.");
+          }
+          setIsLoading(false);
+      }
+  };
+
   return (
     <div className="min-h-screen bg-pitch-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -174,10 +188,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         </div>
       </div>
 
-      <div className="absolute bottom-6 left-0 right-0 text-center opacity-60">
+      <div className="absolute bottom-6 left-0 right-0 text-center opacity-60 flex flex-col items-center gap-2">
           <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">
               Developed by João Layon • DS Company (Digital Solutions)
           </p>
+          <button 
+            onClick={handleHardReset}
+            className="text-[9px] text-red-500/50 hover:text-red-500 uppercase font-bold border border-red-900/30 px-2 py-1 rounded hover:bg-red-900/10 transition-colors"
+          >
+              ⚠️ Resetar Banco de Dados (Dev)
+          </button>
       </div>
     </div>
   );
