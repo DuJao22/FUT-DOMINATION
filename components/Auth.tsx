@@ -38,7 +38,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 following: [],
                 stats: { matchesPlayed: 0, goals: 0, mvps: 0, rating: 0 },
                 badges: [],
-                onboardingCompleted: false
+                onboardingCompleted: false,
+                likes: 0
             };
 
             await dbService.registerUser(newUser, password);

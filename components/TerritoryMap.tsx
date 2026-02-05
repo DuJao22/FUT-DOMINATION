@@ -130,15 +130,32 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
   const [newCourtPos, setNewCourtPos] = useState<{lat: number, lng: number} | null>(null);
   const [newCourtForm, setNewCourtForm] = useState({ name: '', isPaid: false });
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Rating State
+  const [userRating, setUserRating] = useState(0);
 
-  const getUpcomingGames = (court: Court) => {
+  // Helper to check if a game is happening right now (assuming 1.5h duration)
+  const isGameLive = (gameDate: Date) => {
+      const now = new Date();
+      const start = new Date(gameDate);
+      const end = new Date(start.getTime() + 90 * 60000); // 90 mins later
+      return now >= start && now <= end;
+  };
+
+  const getCourtGames = (court: Court) => {
       return pickupGames.filter(g => {
           const dist = Math.sqrt(Math.pow(g.lat - court.lat, 2) + Math.pow(g.lng - court.lng, 2));
-          return dist < 0.0005; 
+          return dist < 0.0005; // ~50m radius match
       });
   };
 
-  const upcomingGamesForSelected = selectedCourt ? getUpcomingGames(selectedCourt) : [];
+  const allGamesForSelected = selectedCourt ? getCourtGames(selectedCourt) : [];
+  
+  // Separate Live vs Future
+  const liveGames = allGamesForSelected.filter(g => isGameLive(g.date));
+  const futureGames = allGamesForSelected
+    .filter(g => new Date(g.date) > new Date())
+    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const handleSaveCourt = async () => {
       if (!newCourtPos || !newCourtForm.name) return;
@@ -154,7 +171,9 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
               cep: '',
               number: '',
               phone: '',
-              registeredByTeamId: currentUser?.teamId || 'user_signal'
+              registeredByTeamId: currentUser?.teamId || 'user_signal',
+              rating: 0,
+              ratingCount: 0
           };
 
           await dbService.createCourt(newCourt);
@@ -169,6 +188,18 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
           alert("Erro ao salvar quadra.");
       } finally {
           setIsSaving(false);
+      }
+  };
+
+  const handleRateCourt = async (rating: number) => {
+      if (!selectedCourt || !currentUser) return;
+      setUserRating(rating); // Optimistic Update
+      
+      const success = await dbService.rateCourt(selectedCourt.id, currentUser.id, rating);
+      if(success) {
+          if (onCourtAdded) onCourtAdded(); // Refresh data to get new average
+      } else {
+          alert("Erro ao enviar avaliação.");
       }
   };
 
@@ -223,6 +254,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                         if (isAddingCourt) return;
                         setSelectedTerritory(null);
                         setSelectedCourt(c);
+                        setUserRating(0); // Reset local rating state on open
                     }
                 }}
             />
@@ -382,7 +414,7 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
 
       {selectedCourt && (
         <div className="absolute bottom-20 left-2 right-2 md:bottom-6 md:left-6 md:right-auto md:w-96 z-[1000] animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-           <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5">
+           <div className="bg-pitch-950/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden group ring-1 ring-white/5 flex flex-col max-h-[70vh]">
                <button 
                   onClick={(e) => { e.stopPropagation(); setSelectedCourt(null); }} 
                   className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-20"
@@ -409,28 +441,94 @@ export const TerritoryMap: React.FC<TerritoryMapProps> = ({ territories, teams, 
                        </div>
                    </div>
                </div>
+               
+               {/* --- RATING SECTION --- */}
+               <div className="bg-black/40 rounded-xl p-3 border border-white/5 mb-4 relative z-10">
+                   <div className="flex justify-between items-center mb-2">
+                       <p className="text-[9px] text-gray-500 uppercase font-bold">Avaliação Geral</p>
+                       <span className="text-xs text-neon font-bold">{selectedCourt.ratingCount} Avaliações</span>
+                   </div>
+                   <div className="flex items-center gap-2">
+                       <span className="text-2xl font-display font-bold text-white">{selectedCourt.rating > 0 ? selectedCourt.rating.toFixed(1) : '-'}</span>
+                       <div className="flex gap-1">
+                           {[1, 2, 3, 4, 5].map(star => (
+                               <button 
+                                   key={star}
+                                   onClick={() => handleRateCourt(star)}
+                                   className={`text-xl transition-all hover:scale-110 ${
+                                       star <= (userRating || Math.round(selectedCourt.rating)) 
+                                       ? 'text-gold drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]' 
+                                       : 'text-gray-700 hover:text-gold/50'
+                                   }`}
+                               >
+                                   ★
+                               </button>
+                           ))}
+                       </div>
+                   </div>
+               </div>
+
                <div className="bg-black/40 rounded-xl p-3 border border-white/5 mb-4 relative z-10">
                    <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">Localização</p>
                    <p className="text-sm text-gray-300 font-medium leading-snug">{selectedCourt.address}</p>
                </div>
-               {upcomingGamesForSelected.length > 0 && (
-                   <div className="mb-4 bg-white/5 rounded-xl p-3 border border-white/5 relative z-10">
-                       <p className="text-[9px] text-neon uppercase font-bold mb-2">📅 Próximos Jogos</p>
-                       <div className="space-y-1">
-                           {upcomingGamesForSelected.slice(0, 2).map(g => (
-                               <div key={g.id} className="flex justify-between text-xs">
-                                   <span className="text-white">{g.title}</span>
-                                   <span className="text-gray-500">{new Date(g.date).toLocaleDateString()}</span>
+
+               {/* --- LIVE GAME SECTION --- */}
+               {liveGames.length > 0 && (
+                   <div className="mb-4 relative z-10 animate-pulse">
+                       <div className="bg-gradient-to-r from-red-900/80 to-black p-3 rounded-xl border border-red-500/50 flex items-center justify-between shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+                           <div className="flex items-center gap-3">
+                               <div className="relative">
+                                   <div className="w-3 h-3 bg-red-500 rounded-full animate-ping absolute top-0 left-0"></div>
+                                   <div className="w-3 h-3 bg-red-500 rounded-full relative"></div>
                                </div>
-                           ))}
+                               <div>
+                                   <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest leading-none mb-1">Rolando Agora</p>
+                                   <p className="text-white font-bold text-sm">{liveGames[0].title}</p>
+                               </div>
+                           </div>
+                           <span className="text-2xl">🔥</span>
                        </div>
                    </div>
                )}
+
+               {/* --- UPCOMING GAMES LIST --- */}
+               <div className="flex-1 overflow-y-auto mb-4 relative z-10 pr-1 custom-scrollbar">
+                   <p className="text-[10px] text-neon uppercase font-bold mb-2 sticky top-0 bg-pitch-950/95 py-1 z-20">📅 Próximos Jogos</p>
+                   {futureGames.length > 0 ? (
+                       <div className="space-y-2">
+                           {futureGames.map(g => (
+                               <div key={g.id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                                   <div>
+                                       <span className="block text-white font-bold text-xs">{g.title}</span>
+                                       <div className="flex gap-2 text-[10px] text-gray-400 mt-0.5">
+                                           <span>{new Date(g.date).toLocaleDateString()}</span>
+                                           <span>•</span>
+                                           <span>{new Date(g.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                       </div>
+                                   </div>
+                                   <div className="flex -space-x-2">
+                                       {/* Mini avatar simulation */}
+                                       <div className="w-6 h-6 rounded-full bg-gray-700 border border-pitch-950"></div>
+                                       <div className="w-6 h-6 rounded-full bg-gray-600 border border-pitch-950 flex items-center justify-center text-[8px] font-bold text-white">
+                                           {g.confirmedPlayers.length}
+                                       </div>
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   ) : (
+                       <div className="text-center py-4 bg-white/5 rounded-xl border border-dashed border-white/10">
+                           <p className="text-gray-500 text-xs italic">Nenhum jogo agendado.</p>
+                       </div>
+                   )}
+               </div>
+
                <a 
                    href={`https://www.google.com/maps/search/?api=1&query=${selectedCourt.lat},${selectedCourt.lng}`}
                    target="_blank"
                    rel="noreferrer"
-                   className={`block w-full text-center font-bold py-3.5 rounded-xl uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all relative z-10 ${
+                   className={`block w-full text-center font-bold py-3.5 rounded-xl uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all relative z-10 flex-shrink-0 ${
                    selectedCourt.isPaid 
                    ? 'bg-gold text-black shadow-gold/30' 
                    : 'bg-neon text-black shadow-neon/30'

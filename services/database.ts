@@ -9,16 +9,53 @@ const FALLBACK_CONNECTION_STRING = "sqlitecloud://cbw4nq6vvk.g5.sqlite.cloud:886
 
 class DatabaseService {
   private db: Database;
+  private connectionString: string;
 
   constructor() {
     // Ensure we have a valid string. If process.env is empty/undefined, use fallback.
-    const connectionString = process.env.SQLITE_CONNECTION_STRING || FALLBACK_CONNECTION_STRING;
+    this.connectionString = process.env.SQLITE_CONNECTION_STRING || FALLBACK_CONNECTION_STRING;
     
-    if (!connectionString) {
+    if (!this.connectionString) {
         console.error("CRITICAL: SQLITE_CONNECTION_STRING is missing and no fallback found.");
     }
     
-    this.db = new Database(connectionString);
+    this.db = new Database(this.connectionString);
+  }
+
+  /**
+   * Wrapper for SQL execution with Retry/Reconnect logic.
+   * This fixes "Connection unavailable" errors by re-initializing the driver if it disconnects.
+   */
+  private async executeQuery(sql: string): Promise<any> {
+      try {
+          return await this.db.sql(sql);
+      } catch (error: any) {
+          const errMsg = error?.message || JSON.stringify(error);
+          
+          // Detect disconnection or connection availability issues
+          if (
+              errMsg.includes("Connection unavailable") || 
+              errMsg.includes("Disconnected") || 
+              errMsg.includes("Socket closed") ||
+              errMsg.includes("Network Error")
+          ) {
+              console.warn("⚠️ DB Connection lost. Reconnecting and retrying...", errMsg);
+              
+              // Force re-initialization of the driver
+              try {
+                  this.db = new Database(this.connectionString);
+                  // Small delay to allow socket handshake
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  // Retry the query once
+                  return await this.db.sql(sql);
+              } catch (retryError) {
+                  console.error("❌ Retry failed:", retryError);
+                  throw retryError;
+              }
+          }
+          
+          throw error;
+      }
   }
 
   // --- HARD RESET (DEV ONLY) ---
@@ -27,17 +64,19 @@ class DatabaseService {
           console.warn("⚠️ INICIANDO RESET COMPLETO DO BANCO DE DADOS...");
           
           // 1. Disable FK checks to allow dropping tables in any order
-          await this.db.sql('PRAGMA foreign_keys = OFF;');
+          await this.executeQuery('PRAGMA foreign_keys = OFF;');
 
           // 2. Drop ALL Tables
           const tables = [
               'notifications',
               'pickup_games',
+              'court_ratings', // New
               'courts',
               'matches',
               'territories',
               'teams',
               'user_follows',
+              'player_likes', // New
               'user_badges',
               'player_stats',
               'users',
@@ -46,11 +85,11 @@ class DatabaseService {
           ];
 
           for (const table of tables) {
-              await this.db.sql(`DROP TABLE IF EXISTS ${table};`);
+              await this.executeQuery(`DROP TABLE IF EXISTS ${table};`);
           }
 
           // 3. Re-enable FK checks
-          await this.db.sql('PRAGMA foreign_keys = ON;');
+          await this.executeQuery('PRAGMA foreign_keys = ON;');
 
           console.log("✅ Tabelas removidas. Recriando Schema...");
 
@@ -69,10 +108,10 @@ class DatabaseService {
   async initSchema(): Promise<void> {
     try {
         // Enable Foreign Keys
-        await this.db.sql('PRAGMA foreign_keys = ON;');
+        await this.executeQuery('PRAGMA foreign_keys = ON;');
 
         // 1. Users & Profiles
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -85,11 +124,22 @@ class DatabaseService {
                 position TEXT,
                 shirt_number INTEGER,
                 onboarding_completed INTEGER DEFAULT 0,
+                likes INTEGER DEFAULT 0, -- NEW: Profile Likes
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        await this.db.sql(`
+        // NEW: Player Likes Table
+        await this.executeQuery(`
+            CREATE TABLE IF NOT EXISTS player_likes (
+                target_user_id TEXT NOT NULL,
+                liked_by_user_id TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (target_user_id, liked_by_user_id)
+            );
+        `);
+
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS player_stats (
                 user_id TEXT PRIMARY KEY,
                 matches_played INTEGER DEFAULT 0,
@@ -100,7 +150,7 @@ class DatabaseService {
             );
         `);
 
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS user_badges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT NOT NULL,
@@ -109,7 +159,7 @@ class DatabaseService {
             );
         `);
 
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS user_follows (
                 user_id TEXT NOT NULL,
                 team_id TEXT NOT NULL,
@@ -119,7 +169,7 @@ class DatabaseService {
         `);
 
         // 2. Teams
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS teams (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -139,7 +189,7 @@ class DatabaseService {
         `);
 
         // 3. Territories
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS territories (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -151,7 +201,7 @@ class DatabaseService {
         `);
 
         // 4. Matches
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS matches (
                 id TEXT PRIMARY KEY,
                 date TEXT NOT NULL,
@@ -169,7 +219,7 @@ class DatabaseService {
         `);
 
         // 5. Courts (New)
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS courts (
                 id TEXT PRIMARY KEY,
                 name TEXT,
@@ -180,12 +230,25 @@ class DatabaseService {
                 lat REAL,
                 lng REAL,
                 registered_by_team_id TEXT,
-                is_paid INTEGER
+                is_paid INTEGER,
+                rating REAL DEFAULT 0,
+                rating_count INTEGER DEFAULT 0
+            );
+        `);
+
+        // NEW: Court Ratings Table
+        await this.executeQuery(`
+            CREATE TABLE IF NOT EXISTS court_ratings (
+                court_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                rating INTEGER NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (court_id, user_id)
             );
         `);
 
         // 6. Pickup Games (New)
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS pickup_games (
                 id TEXT PRIMARY KEY,
                 host_id TEXT,
@@ -203,7 +266,7 @@ class DatabaseService {
         `);
 
         // 7. Notifications (New)
-        await this.db.sql(`
+        await this.executeQuery(`
             CREATE TABLE IF NOT EXISTS notifications (
                 id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -220,11 +283,18 @@ class DatabaseService {
 
         // --- AUTO-MIGRATIONS (SELF-HEALING) ---
         // Tries to add columns if they are missing from older DB versions.
-        // We catch errors because if the column exists, it throws an error, which implies success.
-        try { await this.db.sql(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0;`); } catch (e) {}
-        try { await this.db.sql(`ALTER TABLE users ADD COLUMN position TEXT;`); } catch (e) {}
-        try { await this.db.sql(`ALTER TABLE users ADD COLUMN shirt_number INTEGER;`); } catch (e) {}
-        try { await this.db.sql(`ALTER TABLE courts ADD COLUMN is_paid INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE users ADD COLUMN position TEXT;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE users ADD COLUMN shirt_number INTEGER;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE users ADD COLUMN likes INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE courts ADD COLUMN is_paid INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE courts ADD COLUMN rating REAL DEFAULT 0;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE courts ADD COLUMN rating_count INTEGER DEFAULT 0;`); } catch (e) {}
+        
+        // Fix for missing location columns in teams table
+        try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN city TEXT;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN state TEXT;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN neighborhood TEXT;`); } catch (e) {}
 
         console.log("✅ Database Schema Synced with SQLite Cloud");
     } catch (error) {
@@ -247,6 +317,7 @@ class DatabaseService {
           onboardingCompleted: !!row.onboarding_completed,
           position: row.position,
           shirtNumber: row.shirt_number,
+          likes: row.likes || 0,
           stats: {
               matchesPlayed: row.matches_played || 0,
               goals: row.goals || 0,
@@ -281,8 +352,8 @@ class DatabaseService {
 
   async getTeams(): Promise<Team[]> {
     try {
-        const teamsData = await this.db.sql(`SELECT * FROM teams`);
-        const usersData = await this.db.sql(`SELECT * FROM users WHERE team_id IS NOT NULL`);
+        const teamsData = await this.executeQuery(`SELECT * FROM teams`);
+        const usersData = await this.executeQuery(`SELECT * FROM users WHERE team_id IS NOT NULL`);
         
         // Map users to clean objects first
         const allPlayers = usersData.map((u: any) => this.mapUser(u));
@@ -292,14 +363,14 @@ class DatabaseService {
             return this.mapTeam(t, teamPlayers);
         });
     } catch (e) {
-        console.error(e);
+        console.error("getTeams error:", e);
         return [];
     }
   }
 
   async getMatches(): Promise<Match[]> {
     try {
-        const rows = await this.db.sql(`SELECT * FROM matches ORDER BY date DESC`);
+        const rows = await this.executeQuery(`SELECT * FROM matches ORDER BY date DESC`);
         return rows.map((row: any) => ({
             id: row.id,
             date: new Date(row.date),
@@ -315,14 +386,14 @@ class DatabaseService {
             goals: row.goals ? JSON.parse(row.goals) : []
         }));
     } catch (e) {
-        console.error(e);
+        console.error("getMatches error:", e);
         return [];
     }
   }
 
   async getTerritories(): Promise<Territory[]> {
     try {
-        const rows = await this.db.sql(`SELECT * FROM territories`);
+        const rows = await this.executeQuery(`SELECT * FROM territories`);
         return rows.map((row: any) => ({
             id: row.id,
             name: row.name,
@@ -336,7 +407,7 @@ class DatabaseService {
 
   async getCourts(): Promise<Court[]> {
     try {
-        const rows = await this.db.sql(`SELECT * FROM courts`);
+        const rows = await this.executeQuery(`SELECT * FROM courts`);
         return rows.map((row: any) => ({
             id: row.id,
             name: row.name,
@@ -347,14 +418,16 @@ class DatabaseService {
             lat: row.lat,
             lng: row.lng,
             registeredByTeamId: row.registered_by_team_id,
-            isPaid: !!row.is_paid
+            isPaid: !!row.is_paid,
+            rating: row.rating || 0,
+            ratingCount: row.rating_count || 0
         }));
     } catch (e) { return []; }
   }
 
   async getPickupGames(): Promise<PickupGame[]> {
     try {
-        const rows = await this.db.sql(`SELECT * FROM pickup_games WHERE date >= date('now', '-1 day') ORDER BY date ASC`);
+        const rows = await this.executeQuery(`SELECT * FROM pickup_games WHERE date >= date('now', '-1 day') ORDER BY date ASC`);
         return rows.map((row: any) => ({
             id: row.id,
             hostId: row.host_id,
@@ -375,7 +448,7 @@ class DatabaseService {
   async getUserById(id: string): Promise<User | null> {
     try {
         // Fetch User + Stats
-        const rows = await this.db.sql(`
+        const rows = await this.executeQuery(`
             SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating
             FROM users u 
             LEFT JOIN player_stats s ON u.id = s.user_id
@@ -387,11 +460,11 @@ class DatabaseService {
         const userRow = rows[0];
         
         // Fetch Badges
-        const badgeRows = await this.db.sql(`SELECT badge_name FROM user_badges WHERE user_id = '${id}'`);
+        const badgeRows = await this.executeQuery(`SELECT badge_name FROM user_badges WHERE user_id = '${id}'`);
         const badges = badgeRows.map((b: any) => b.badge_name);
 
         // Fetch Follows
-        const followRows = await this.db.sql(`SELECT team_id FROM user_follows WHERE user_id = '${id}'`);
+        const followRows = await this.executeQuery(`SELECT team_id FROM user_follows WHERE user_id = '${id}'`);
         const following = followRows.map((f: any) => f.team_id);
 
         return {
@@ -400,7 +473,7 @@ class DatabaseService {
             following
         };
     } catch (e) {
-        console.error(e);
+        console.error("getUserById error:", e);
         return null;
     }
   }
@@ -409,7 +482,7 @@ class DatabaseService {
       if (ids.length === 0) return [];
       try {
           const idsStr = ids.map(id => `'${id}'`).join(',');
-          const rows = await this.db.sql(`
+          const rows = await this.executeQuery(`
             SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating
             FROM users u
             LEFT JOIN player_stats s ON u.id = s.user_id
@@ -421,7 +494,7 @@ class DatabaseService {
 
   async getNotifications(userId: string): Promise<Notification[]> {
       try {
-          const rows = await this.db.sql(`SELECT * FROM notifications WHERE user_id = '${userId}' ORDER BY timestamp DESC`);
+          const rows = await this.executeQuery(`SELECT * FROM notifications WHERE user_id = '${userId}' ORDER BY timestamp DESC`);
           return rows.map((row: any) => ({
               id: row.id,
               userId: row.user_id,
@@ -441,12 +514,12 @@ class DatabaseService {
 
   async registerUser(user: User, password?: string): Promise<boolean> {
       try {
-          await this.db.sql(`
-            INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed)
-            VALUES ('${user.id}', '${user.name}', '${user.email}', '${user.role}', '${user.avatarUrl}', '${user.bio}', '${user.location}', 0)
+          await this.executeQuery(`
+            INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed, likes)
+            VALUES ('${user.id}', '${user.name}', '${user.email}', '${user.role}', '${user.avatarUrl}', '${user.bio}', '${user.location}', 0, 0)
           `);
           // Init stats
-          await this.db.sql(`INSERT INTO player_stats (user_id) VALUES ('${user.id}')`);
+          await this.executeQuery(`INSERT INTO player_stats (user_id) VALUES ('${user.id}')`);
           return true;
       } catch (e) {
           console.error(e);
@@ -456,7 +529,7 @@ class DatabaseService {
 
   async loginUser(email: string): Promise<User | null> {
       try {
-          const rows = await this.db.sql(`SELECT id FROM users WHERE email = '${email}'`);
+          const rows = await this.executeQuery(`SELECT id FROM users WHERE email = '${email}'`);
           if (rows.length > 0) {
               return this.getUserById(rows[0].id);
           }
@@ -484,18 +557,18 @@ class DatabaseService {
           }
           
           updateQuery += ` WHERE id = '${userId}'`;
-          await this.db.sql(updateQuery);
+          await this.executeQuery(updateQuery);
 
           // 2. Create Team if Owner
           if (role === UserRole.OWNER && teamData) {
               const newTeamId = `t-${Date.now()}`;
-              await this.db.sql(`
+              await this.executeQuery(`
                 INSERT INTO teams (id, name, logo_url, territory_color, owner_id, category, home_turf, city, state, neighborhood, wins, losses, draws)
                 VALUES ('${newTeamId}', '${teamData.name}', '${teamData.logoUrl}', '#39ff14', '${userId}', '${teamData.category}', '${teamData.homeTurf}', '${teamData.city}', '${teamData.state}', '${teamData.neighborhood}', 0, 0, 0)
               `);
               
               // Link user to team
-              await this.db.sql(`UPDATE users SET team_id = '${newTeamId}' WHERE id = '${userId}'`);
+              await this.executeQuery(`UPDATE users SET team_id = '${newTeamId}' WHERE id = '${userId}'`);
           }
 
           const updatedUser = await this.getUserById(userId);
@@ -506,13 +579,67 @@ class DatabaseService {
       }
   }
 
+  // --- INTERACTION ACTIONS (Likes & Ratings) ---
+
+  async likePlayer(targetUserId: string, likerUserId: string, likerName: string): Promise<boolean> {
+      if (targetUserId === likerUserId) return false;
+      try {
+          // Try insert. Will fail if already liked due to Primary Key (target, liker)
+          await this.executeQuery(`
+            INSERT INTO player_likes (target_user_id, liked_by_user_id) 
+            VALUES ('${targetUserId}', '${likerUserId}')
+          `);
+          
+          // Increment counter
+          await this.executeQuery(`UPDATE users SET likes = likes + 1 WHERE id = '${targetUserId}'`);
+
+          // Notify Target
+          await this.createNotification({
+              userId: targetUserId,
+              type: 'PROFILE_LIKE',
+              title: 'Novo Curtida!',
+              message: `${likerName} curtiu seu perfil de jogador.`,
+              relatedId: likerUserId,
+              // Ideally pass liker avatar too, but simplified here
+          });
+
+          return true;
+      } catch (e: any) {
+          if (e.message?.includes('UNIQUE')) return false; // Already liked
+          console.error(e);
+          return false;
+      }
+  }
+
+  async rateCourt(courtId: string, userId: string, rating: number): Promise<boolean> {
+      try {
+          // Insert or Replace (Upsert)
+          await this.executeQuery(`
+            INSERT OR REPLACE INTO court_ratings (court_id, user_id, rating)
+            VALUES ('${courtId}', '${userId}', ${rating})
+          `);
+
+          // Recalculate Average for the Court
+          const rows = await this.executeQuery(`SELECT AVG(rating) as avg, COUNT(*) as count FROM court_ratings WHERE court_id = '${courtId}'`);
+          const newAvg = rows[0].avg || 0;
+          const newCount = rows[0].count || 0;
+
+          await this.executeQuery(`UPDATE courts SET rating = ${newAvg}, rating_count = ${newCount} WHERE id = '${courtId}'`);
+          
+          return true;
+      } catch (e) {
+          console.error(e);
+          return false;
+      }
+  }
+
   // --- ACTIONS ---
 
   async createCourt(court: Court): Promise<void> {
       try {
-          await this.db.sql(`
-            INSERT INTO courts (id, name, address, cep, number, phone, lat, lng, registered_by_team_id, is_paid)
-            VALUES ('${court.id}', '${court.name}', '${court.address}', '${court.cep}', '${court.number}', '${court.phone}', ${court.lat}, ${court.lng}, '${court.registeredByTeamId}', ${court.isPaid ? 1 : 0})
+          await this.executeQuery(`
+            INSERT INTO courts (id, name, address, cep, number, phone, lat, lng, registered_by_team_id, is_paid, rating, rating_count)
+            VALUES ('${court.id}', '${court.name}', '${court.address}', '${court.cep}', '${court.number}', '${court.phone}', ${court.lat}, ${court.lng}, '${court.registeredByTeamId}', ${court.isPaid ? 1 : 0}, 0, 0)
           `);
       } catch (e) { console.error(e); }
   }
@@ -520,14 +647,14 @@ class DatabaseService {
   async createMatch(match: Match): Promise<boolean> {
       try {
           const goalsJson = JSON.stringify(match.goals || []);
-          await this.db.sql(`
+          await this.executeQuery(`
             INSERT INTO matches (id, date, location_name, court_id, home_team_id, away_team_name, away_team_id, home_score, away_score, is_verified, status, goals)
             VALUES ('${match.id}', '${match.date.toISOString()}', '${match.locationName}', '${match.courtId || ''}', '${match.homeTeamId}', '${match.awayTeamName}', '${match.awayTeamId || ''}', ${match.homeScore || 0}, ${match.awayScore || 0}, ${match.isVerified ? 1 : 0}, '${match.status}', '${goalsJson}')
           `);
 
           // Notify Opponent
           if (match.status === 'PENDING' && match.awayTeamId) {
-              const teams = await this.db.sql(`SELECT owner_id FROM teams WHERE id = '${match.awayTeamId}'`);
+              const teams = await this.executeQuery(`SELECT owner_id FROM teams WHERE id = '${match.awayTeamId}'`);
               if (teams.length > 0) {
                   await this.createNotification({
                       userId: teams[0].owner_id,
@@ -548,7 +675,7 @@ class DatabaseService {
   async createPickupGame(game: PickupGame): Promise<boolean> {
       try {
           const playersJson = JSON.stringify(game.confirmedPlayers);
-          await this.db.sql(`
+          await this.executeQuery(`
             INSERT INTO pickup_games (id, host_id, host_name, title, description, date, location_name, lat, lng, max_players, price, confirmed_players)
             VALUES ('${game.id}', '${game.hostId}', '${game.hostName}', '${game.title}', '${game.description}', '${game.date.toISOString()}', '${game.locationName}', ${game.lat}, ${game.lng}, ${game.maxPlayers}, ${game.price || 0}, '${playersJson}')
           `);
@@ -558,13 +685,13 @@ class DatabaseService {
 
   async updateTeamInfo(id: string, name: string, logoUrl: string): Promise<void> {
       try {
-          await this.db.sql(`UPDATE teams SET name = '${name}', logo_url = '${logoUrl}' WHERE id = '${id}'`);
+          await this.executeQuery(`UPDATE teams SET name = '${name}', logo_url = '${logoUrl}' WHERE id = '${id}'`);
       } catch (e) { console.error(e); }
   }
 
   async updateUserProfile(user: User): Promise<boolean> {
       try {
-          await this.db.sql(`
+          await this.executeQuery(`
             UPDATE users SET 
             name = '${user.name}', 
             bio = '${user.bio}', 
@@ -578,8 +705,8 @@ class DatabaseService {
 
   async requestTrial(userId: string, teamId: string): Promise<boolean> {
       try {
-          const teamRows = await this.db.sql(`SELECT owner_id FROM teams WHERE id = '${teamId}'`);
-          const userRows = await this.db.sql(`SELECT name, avatar_url FROM users WHERE id = '${userId}'`);
+          const teamRows = await this.executeQuery(`SELECT owner_id FROM teams WHERE id = '${teamId}'`);
+          const userRows = await this.executeQuery(`SELECT name, avatar_url FROM users WHERE id = '${userId}'`);
           
           if (teamRows.length > 0 && userRows.length > 0) {
               await this.createNotification({
@@ -600,12 +727,12 @@ class DatabaseService {
   async acceptTrial(notifId: string, teamId: string, playerId: string): Promise<boolean> {
       try {
           // Update User
-          await this.db.sql(`UPDATE users SET team_id = '${teamId}', role = 'PLAYER' WHERE id = '${playerId}'`);
+          await this.executeQuery(`UPDATE users SET team_id = '${teamId}', role = 'PLAYER' WHERE id = '${playerId}'`);
           // Mark notif read
           await this.markNotificationRead(notifId);
           
           // Notify Player
-          const teamRows = await this.db.sql(`SELECT name, logo_url FROM teams WHERE id = '${teamId}'`);
+          const teamRows = await this.executeQuery(`SELECT name, logo_url FROM teams WHERE id = '${teamId}'`);
           if (teamRows.length > 0) {
               await this.createNotification({
                   userId: playerId,
@@ -622,11 +749,11 @@ class DatabaseService {
 
   async addPlayerByEmail(email: string, teamId: string): Promise<{ success: boolean, message: string, user?: User }> {
       try {
-          const rows = await this.db.sql(`SELECT id FROM users WHERE email = '${email}'`);
+          const rows = await this.executeQuery(`SELECT id FROM users WHERE email = '${email}'`);
           if (rows.length === 0) return { success: false, message: 'Usuário não encontrado' };
           
           const userId = rows[0].id;
-          await this.db.sql(`UPDATE users SET team_id = '${teamId}', role = 'PLAYER' WHERE id = '${userId}'`);
+          await this.executeQuery(`UPDATE users SET team_id = '${teamId}', role = 'PLAYER' WHERE id = '${userId}'`);
           
           const user = await this.getUserById(userId);
           return { success: true, message: 'Jogador adicionado', user: user || undefined };
@@ -635,14 +762,14 @@ class DatabaseService {
 
   async updateMatchStatus(matchId: string, status: MatchStatus, isVerified: boolean): Promise<boolean> {
       try {
-          await this.db.sql(`UPDATE matches SET status = '${status}', is_verified = ${isVerified ? 1 : 0} WHERE id = '${matchId}'`);
+          await this.executeQuery(`UPDATE matches SET status = '${status}', is_verified = ${isVerified ? 1 : 0} WHERE id = '${matchId}'`);
           return true;
       } catch (e) { return false; }
   }
 
   async updateMatchDateAndStatus(matchId: string, date: Date, status: MatchStatus, teamId: string): Promise<boolean> {
       try {
-          await this.db.sql(`UPDATE matches SET date = '${date.toISOString()}', status = '${status}' WHERE id = '${matchId}'`);
+          await this.executeQuery(`UPDATE matches SET date = '${date.toISOString()}', status = '${status}' WHERE id = '${matchId}'`);
           
           // Notify other party logic could be here (simplified)
           return true;
@@ -651,7 +778,7 @@ class DatabaseService {
 
   async joinPickupGame(gameId: string, userId: string, date: Date | string): Promise<{success: boolean, message?: string}> {
       try {
-          const rows = await this.db.sql(`SELECT confirmed_players, max_players FROM pickup_games WHERE id = '${gameId}'`);
+          const rows = await this.executeQuery(`SELECT confirmed_players, max_players FROM pickup_games WHERE id = '${gameId}'`);
           if (rows.length === 0) return { success: false, message: 'Jogo não encontrado' };
           
           const game = rows[0];
@@ -661,20 +788,20 @@ class DatabaseService {
           if (players.includes(userId)) return { success: true }; // Already joined
           
           players.push(userId);
-          await this.db.sql(`UPDATE pickup_games SET confirmed_players = '${JSON.stringify(players)}' WHERE id = '${gameId}'`);
+          await this.executeQuery(`UPDATE pickup_games SET confirmed_players = '${JSON.stringify(players)}' WHERE id = '${gameId}'`);
           return { success: true };
       } catch (e) { return { success: false, message: 'Erro de conexão' }; }
   }
 
   async leavePickupGame(gameId: string, userId: string): Promise<boolean> {
       try {
-          const rows = await this.db.sql(`SELECT confirmed_players FROM pickup_games WHERE id = '${gameId}'`);
+          const rows = await this.executeQuery(`SELECT confirmed_players FROM pickup_games WHERE id = '${gameId}'`);
           if (rows.length === 0) return false;
           
           let players = rows[0].confirmed_players ? JSON.parse(rows[0].confirmed_players) : [];
           players = players.filter((id: string) => id !== userId);
           
-          await this.db.sql(`UPDATE pickup_games SET confirmed_players = '${JSON.stringify(players)}' WHERE id = '${gameId}'`);
+          await this.executeQuery(`UPDATE pickup_games SET confirmed_players = '${JSON.stringify(players)}' WHERE id = '${gameId}'`);
           return true;
       } catch (e) { return false; }
   }
@@ -685,7 +812,7 @@ class DatabaseService {
       const ts = new Date().toISOString();
       const actionJson = JSON.stringify(notif.actionData || {});
       
-      await this.db.sql(`
+      await this.executeQuery(`
         INSERT INTO notifications (id, user_id, type, title, message, related_id, related_image, read, timestamp, action_data)
         VALUES ('${id}', '${notif.userId}', '${notif.type}', '${notif.title}', '${notif.message}', '${notif.relatedId || ''}', '${notif.relatedImage || ''}', 0, '${ts}', '${actionJson}')
       `);
@@ -693,7 +820,7 @@ class DatabaseService {
 
   async markNotificationRead(id: string): Promise<void> {
       try {
-          await this.db.sql(`UPDATE notifications SET read = 1 WHERE id = '${id}'`);
+          await this.executeQuery(`UPDATE notifications SET read = 1 WHERE id = '${id}'`);
       } catch (e) { console.error(e); }
   }
 }

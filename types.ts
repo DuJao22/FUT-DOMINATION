@@ -1,3 +1,4 @@
+
 export enum UserRole {
   OWNER = 'OWNER',
   PLAYER = 'PLAYER', // Usually assigned by Owner
@@ -25,6 +26,9 @@ export interface User {
   subscriptionActive?: boolean; // For Owners
   following: string[]; // Array of Team IDs the user follows
   
+  // Social
+  likes: number;
+
   // Onboarding Control
   onboardingCompleted: boolean;
 
@@ -79,6 +83,10 @@ export interface Court {
   lng: number;
   registeredByTeamId: string;
   isPaid: boolean; // NEW: Distinguish Paid vs Free courts
+  
+  // Ratings
+  rating: number;
+  ratingCount: number;
 }
 
 export type MatchStatus = 'SCHEDULED' | 'FINISHED' | 'PENDING' | 'CANCELLED';
@@ -154,7 +162,7 @@ export interface Post {
 export type ImageResolution = '1K' | '2K' | '4K';
 
 // --- NEW NOTIFICATION TYPES ---
-export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE' | 'PICKUP_JOIN';
+export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE' | 'PICKUP_JOIN' | 'PROFILE_LIKE';
 
 export interface Notification {
   id: string;

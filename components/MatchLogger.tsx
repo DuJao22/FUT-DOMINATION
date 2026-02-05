@@ -252,7 +252,9 @@ export const MatchLogger: React.FC<MatchLoggerProps> = ({ onClose, currentUser, 
               ...courtForm,
               lat: newCourtCoords.lat,
               lng: newCourtCoords.lng,
-              registeredByTeamId: userTeamId
+              registeredByTeamId: userTeamId,
+              rating: 0,
+              ratingCount: 0
           };
           await dbService.createCourt(newCourt);
           setCourts(prev => [...prev, newCourt]);

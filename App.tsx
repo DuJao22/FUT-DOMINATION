@@ -28,6 +28,7 @@ const App: React.FC = () => {
   
   // --- PLAYER VIEW STATE ---
   const [viewingPlayer, setViewingPlayer] = useState<User | null>(null);
+  const [playerLiked, setPlayerLiked] = useState(false); // Local state for like animation
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -169,6 +170,21 @@ const App: React.FC = () => {
   // Callback to view a player's profile
   const handleViewPlayer = (user: User) => {
       setViewingPlayer(user);
+      setPlayerLiked(false); // Reset
+  };
+
+  const handleLikePlayer = async () => {
+      if (!viewingPlayer || !activeUser || viewingPlayer.id === activeUser.id) return;
+      
+      const success = await dbService.likePlayer(viewingPlayer.id, activeUser.id, activeUser.name);
+      if (success) {
+          setPlayerLiked(true);
+          // Update local view count optimistically
+          setViewingPlayer(prev => prev ? {...prev, likes: prev.likes + 1} : null);
+      } else {
+          // alert("Você já curtiu este perfil!");
+          setPlayerLiked(true); // Treat as visual success even if DB reject due to duplicate
+      }
   };
 
   const tutorialSteps: TutorialStep[] = [
@@ -358,7 +374,7 @@ const App: React.FC = () => {
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
-            {currentTab === 'rank' && <Rankings teams={teams} />}
+            {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}
           </div>
         </div>
       </main>
@@ -406,12 +422,30 @@ const App: React.FC = () => {
                              <div className="relative w-48 h-48 mx-auto mb-2 z-10">
                                  <div className="absolute inset-0 bg-neon/20 rounded-full blur-[50px] opacity-50"></div>
                                  <img src={viewingPlayer.avatarUrl} className="w-full h-full object-cover drop-shadow-[0_20px_20px_rgba(0,0,0,0.8)] z-20 relative rounded-xl" />
+                                 
+                                 {/* LIKE BUTTON OVERLAY */}
+                                 {activeUser && activeUser.id !== viewingPlayer.id && (
+                                     <button 
+                                        onClick={handleLikePlayer}
+                                        disabled={playerLiked}
+                                        className={`absolute bottom-0 right-0 p-3 rounded-full shadow-2xl border-2 transition-all transform active:scale-90 ${playerLiked ? 'bg-red-500 border-red-400 scale-110' : 'bg-black/50 border-white/30 hover:scale-110 hover:bg-white/10'}`}
+                                     >
+                                         <span className={`text-2xl ${playerLiked ? 'animate-bounce' : ''}`}>❤️</span>
+                                     </button>
+                                 )}
                              </div>
                              
-                             <h2 className="text-4xl font-display font-bold text-center uppercase tracking-wider mb-2 pb-2 border-b border-white/10 relative z-10">
-                                {viewingPlayer.name}
-                             </h2>
-                             <p className="text-center text-gray-400 text-xs uppercase tracking-widest mb-4 relative z-10">{viewingPlayer.bio || "Sem biografia..."}</p>
+                             <div className="text-center mb-4 relative z-10">
+                                <h2 className="text-4xl font-display font-bold uppercase tracking-wider mb-1">
+                                    {viewingPlayer.name}
+                                </h2>
+                                <div className="flex items-center justify-center gap-2">
+                                    <span className="text-gray-400 text-xs uppercase tracking-widest bg-black/40 px-2 py-0.5 rounded">
+                                        {viewingPlayer.likes} Curtidas
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-xs mt-2 italic">"{viewingPlayer.bio || "Sem biografia..."}"</p>
+                             </div>
                              
                              <div className="grid grid-cols-3 gap-2 text-center relative z-10">
                                  <div className="p-2 rounded-lg bg-white/5 border border-white/5">

@@ -1,38 +1,80 @@
 import React, { useState } from 'react';
-import { Team } from '../types';
+import { Team, User } from '../types';
 
 interface RankingsProps {
   teams: Team[];
+  currentUser?: User | null;
 }
 
-export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
+export const Rankings: React.FC<RankingsProps> = ({ teams, currentUser }) => {
   // Updated filter state to include new scopes
-  const [filter, setFilter] = useState<'mundial' | 'nacional' | 'estado' | 'cidade' | 'bairro'>('cidade');
+  const [filter, setFilter] = useState<'mundial' | 'nacional' | 'estado' | 'cidade' | 'bairro'>('mundial');
   
-  // Find current user's team context (for filtering reference)
-  const myTeam = teams.find(t => t.id === localStorage.getItem('fut_dom_user_team_id')) || teams[0];
-  
-  const referenceLocation = {
-      country: 'Brasil', // Hardcoded scope for Nacional
-      city: myTeam?.city || 'São Paulo',
-      state: myTeam?.state || 'SP',
-      neighborhood: myTeam?.neighborhood || 'Centro'
+  // Helper for string normalization (removes accents, lowercase, trim)
+  const normalize = (str?: string) => {
+      return str ? str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
   };
+
+  // Determine Reference Location based on Current User
+  const getReferenceLocation = () => {
+      // 1. If user owns/plays for a team, use that team's location
+      if (currentUser?.teamId) {
+          const myTeam = teams.find(t => t.id === currentUser.teamId);
+          if (myTeam?.city && myTeam?.state) {
+              return {
+                  city: myTeam.city,
+                  state: myTeam.state,
+                  neighborhood: myTeam.neighborhood || ''
+              };
+          }
+      }
+
+      // 2. If user is Fan/Free Agent, try to parse from their location string "City - State"
+      if (currentUser?.location && currentUser.location.includes('-')) {
+          const parts = currentUser.location.split('-');
+          return {
+              city: parts[0].trim(),
+              state: parts[1].trim(),
+              neighborhood: '' 
+          };
+      }
+
+      // 3. Fallback (e.g. First team in list or generic)
+      if (teams.length > 0 && teams[0].city) {
+          return {
+              city: teams[0].city,
+              state: teams[0].state || '',
+              neighborhood: teams[0].neighborhood || ''
+          };
+      }
+
+      return { city: 'São Paulo', state: 'SP', neighborhood: 'Centro' };
+  };
+
+  const refLoc = getReferenceLocation();
 
   const filteredTeams = teams.filter(team => {
       // Mundial shows everyone
       if (filter === 'mundial') return true;
 
       // Nacional shows everyone valid (assuming app is currently BR only)
-      // We check if they have at least a state registered to be considered "Active" in the country list
       if (filter === 'nacional') return !!team.state;
 
-      // Legacy/Incomplete data handling: If strict location missing, hide from strict lists
+      // Ensure team has location data for strict filters
       if (!team.city || !team.state) return false;
       
-      if (filter === 'estado') return team.state === referenceLocation.state;
-      if (filter === 'cidade') return team.city === referenceLocation.city;
-      if (filter === 'bairro') return team.neighborhood === referenceLocation.neighborhood && team.city === referenceLocation.city;
+      const tCity = normalize(team.city);
+      const tState = normalize(team.state);
+      const tHood = normalize(team.neighborhood);
+      
+      const rCity = normalize(refLoc.city);
+      const rState = normalize(refLoc.state);
+      const rHood = normalize(refLoc.neighborhood);
+
+      if (filter === 'estado') return tState === rState;
+      if (filter === 'cidade') return tCity === rCity;
+      if (filter === 'bairro') return tCity === rCity && tHood === rHood;
+      
       return true;
   });
 
@@ -46,9 +88,9 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
       switch(filter) {
           case 'mundial': return 'Ranking Global';
           case 'nacional': return 'Brasil';
-          case 'estado': return referenceLocation.state;
-          case 'cidade': return referenceLocation.city;
-          case 'bairro': return referenceLocation.neighborhood;
+          case 'estado': return refLoc.state || 'Estado';
+          case 'cidade': return refLoc.city || 'Cidade';
+          case 'bairro': return refLoc.neighborhood || 'Bairro';
           default: return 'Ranking';
       }
   };
@@ -62,6 +104,11 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
           <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide text-glow">
               {getHeaderTitle()}
           </h2>
+          {filter !== 'mundial' && filter !== 'nacional' && (
+              <p className="text-[10px] text-gray-400 mt-1">
+                  Filtrando por: {filter === 'estado' ? refLoc.state : filter === 'cidade' ? `${refLoc.city} - ${refLoc.state}` : `${refLoc.neighborhood}, ${refLoc.city}`}
+              </p>
+          )}
       </div>
 
       {/* Filters Segmented Control - Scrollable on Mobile */}
@@ -84,10 +131,12 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
       </div>
 
       {sortedTeams.length === 0 ? (
-          <div className="text-center py-12 bg-white/5 rounded-3xl mx-4 border border-dashed border-white/10">
+          <div className="text-center py-12 bg-white/5 rounded-3xl mx-4 border border-dashed border-white/10 animate-fadeIn">
               <span className="text-4xl block mb-2 opacity-50">🌍</span>
               <p className="text-gray-400 font-bold">Nenhum time encontrado.</p>
-              <p className="text-xs text-gray-600 mt-1">Seja o primeiro a dominar esta região!</p>
+              <p className="text-xs text-gray-600 mt-1">
+                  Não há times registrados em <span className="text-neon">{getHeaderTitle()}</span> ainda.
+              </p>
           </div>
       ) : (
         <>
@@ -177,7 +226,7 @@ export const Rankings: React.FC<RankingsProps> = ({ teams }) => {
                         <div className="flex items-center gap-2 mb-1">
                             <h4 className="text-white font-bold truncate group-hover:text-neon transition-colors">{team.name}</h4>
                             {/* Location Pill */}
-                            <span className="bg-green-900/60 text-green-400 border border-green-500/30 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                            <span className="bg-green-900/60 text-green-400 border border-green-500/30 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide truncate max-w-[80px]">
                                 {team.neighborhood || team.homeTurf}
                             </span>
                         </div>
