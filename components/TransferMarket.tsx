@@ -5,11 +5,13 @@ import { dbService } from '../services/database';
 interface TransferMarketProps {
     teams: Team[];
     currentUser: User;
+    onViewPlayer?: (user: User) => void;
 }
 
-export const TransferMarket: React.FC<TransferMarketProps> = ({ teams, currentUser }) => {
+export const TransferMarket: React.FC<TransferMarketProps> = ({ teams, currentUser, onViewPlayer }) => {
     const [filter, setFilter] = useState('');
     const [requestedTeams, setRequestedTeams] = useState<Set<string>>(new Set());
+    const [viewingTeamRoster, setViewingTeamRoster] = useState<Team | null>(null);
 
     // Filter teams based on search
     const filteredTeams = teams.filter(t => 
@@ -71,15 +73,18 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({ teams, currentUs
                         className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center gap-4 hover:border-white/20 hover:bg-white/10 transition-all group shadow-lg backdrop-blur-md animate-[fadeIn_0.3s_ease-out]"
                         style={{ animationDelay: `${idx * 0.05}s` }}
                     >
-                        {/* Logo */}
-                        <div className="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-gray-700 to-black relative flex-shrink-0 shadow-lg group-hover:scale-105 transition-transform">
+                        {/* Logo - Click to View Roster */}
+                        <div 
+                            onClick={() => setViewingTeamRoster(team)}
+                            className="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-gray-700 to-black relative flex-shrink-0 shadow-lg group-hover:scale-105 transition-transform cursor-pointer"
+                        >
                             <img src={team.logoUrl} className="w-full h-full rounded-full object-cover border border-white/10" />
                             {/* Territory Indicator */}
                             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-pitch-900 flex items-center justify-center text-[10px]" style={{backgroundColor: team.territoryColor}}>📍</div>
                         </div>
 
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
+                        {/* Info - Click to View Roster */}
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setViewingTeamRoster(team)}>
                             <div className="flex items-center gap-2 mb-1">
                                 <h3 className="font-bold text-white text-lg truncate group-hover:text-neon transition-colors">{team.name}</h3>
                                 {/* Location Pill */}
@@ -90,6 +95,7 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({ teams, currentUs
                             
                             <div className="flex flex-wrap gap-2 text-xs text-gray-400 mt-1 mb-2">
                                 <span className="bg-white/5 px-2 py-0.5 rounded border border-white/5">Liga {team.category}</span>
+                                <span className="text-[10px] text-gray-500 font-bold ml-1">{team.players.length} Jogadores</span>
                             </div>
                             
                             {/* Stats Mini Bar */}
@@ -134,6 +140,64 @@ export const TransferMarket: React.FC<TransferMarketProps> = ({ teams, currentUs
                     </div>
                 )}
             </div>
+
+            {/* TEAM ROSTER MODAL */}
+            {viewingTeamRoster && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
+                    <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/50">
+                            <div className="flex items-center gap-3">
+                                <img src={viewingTeamRoster.logoUrl} className="w-10 h-10 rounded-full bg-black border border-white/10 object-cover" />
+                                <div>
+                                    <h3 className="text-white font-bold uppercase tracking-wide leading-none">{viewingTeamRoster.name}</h3>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Elenco ({viewingTeamRoster.players.length})</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setViewingTeamRoster(null)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/10">✕</button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                            {viewingTeamRoster.players.length === 0 ? (
+                                <p className="text-gray-500 text-center py-8 italic">Este time ainda não tem jogadores.</p>
+                            ) : (
+                                viewingTeamRoster.players.map(player => (
+                                    <div 
+                                        key={player.id} 
+                                        onClick={() => onViewPlayer && onViewPlayer(player)}
+                                        className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+                                    >
+                                        <div className="relative">
+                                            <img src={player.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
+                                            {player.role === UserRole.OWNER && <span className="absolute -top-1 -right-1 text-[10px]">👑</span>}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-white font-bold text-sm">{player.name}</p>
+                                            <p className="text-[10px] text-gray-400 uppercase font-mono">{player.position || 'Jogador'} {player.shirtNumber ? `• #${player.shirtNumber}` : ''}</p>
+                                        </div>
+                                        {player.stats?.rating && (
+                                            <div className="text-center bg-black/30 rounded p-1">
+                                                <span className="block text-neon font-display text-sm font-bold leading-none">{player.stats.rating}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        
+                        {/* Footer Action */}
+                        {!currentUser.teamId && currentUser.id !== viewingTeamRoster.ownerId && (
+                            <div className="p-4 border-t border-white/10 bg-black/20">
+                                <button 
+                                    onClick={() => { handleRequestTrial(viewingTeamRoster); setViewingTeamRoster(null); }}
+                                    className="w-full bg-neon text-black font-bold py-3 rounded-xl uppercase text-xs tracking-widest hover:bg-white transition-colors"
+                                >
+                                    Pedir para Jogar Aqui
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

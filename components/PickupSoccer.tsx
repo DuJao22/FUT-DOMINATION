@@ -45,9 +45,10 @@ const LocationController = ({ onLocationSelect, forcedPosition }: { onLocationSe
 
 interface PickupSoccerProps {
     currentUser: User;
+    onViewPlayer?: (user: User) => void;
 }
 
-export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
+export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewPlayer }) => {
     const [activeTab, setActiveTab] = useState<'explore' | 'create'>('explore');
     const [games, setGames] = useState<PickupGame[]>([]);
     const [courts, setCourts] = useState<Court[]>([]);
@@ -602,7 +603,11 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser }) => {
                                 <p className="text-gray-500 text-center py-4 text-sm italic">Ninguém confirmou presença ainda.</p>
                             ) : (
                                 viewingAttendees.map(user => (
-                                    <div key={user.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5">
+                                    <div 
+                                        key={user.id} 
+                                        onClick={() => onViewPlayer && onViewPlayer(user)} // CLICK HANDLER ADDED
+                                        className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+                                    >
                                         <img src={user.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">

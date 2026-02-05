@@ -26,6 +26,9 @@ const App: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
   
+  // --- PLAYER VIEW STATE ---
+  const [viewingPlayer, setViewingPlayer] = useState<User | null>(null);
+  
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -161,6 +164,11 @@ const App: React.FC = () => {
           setCurrentTab('map');
       }
       checkTutorialStatus();
+  };
+
+  // Callback to view a player's profile
+  const handleViewPlayer = (user: User) => {
+      setViewingPlayer(user);
   };
 
   const tutorialSteps: TutorialStep[] = [
@@ -344,16 +352,96 @@ const App: React.FC = () => {
           )}
 
           <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
-            {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} />}
-            {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} />}
+            {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+            {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
-            {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} />}
-            {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} />}
+            {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} onViewPlayer={handleViewPlayer} />}
+            {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} />}
           </div>
         </div>
       </main>
+
+      {/* --- MODAL FOR VIEWING PLAYER PROFILE --- */}
+      {viewingPlayer && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]" onClick={() => setViewingPlayer(null)}>
+              <div 
+                  className="w-full max-w-sm relative" 
+                  onClick={e => e.stopPropagation()} // Prevent close on card click
+              >
+                  <button 
+                      onClick={() => setViewingPlayer(null)}
+                      className="absolute -top-12 right-0 bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20"
+                  >
+                      ✕
+                  </button>
+
+                  <div className="relative group perspective-1000">
+                     {/* Animated Glow Behind */}
+                     <div className="absolute -inset-1 bg-gradient-to-r from-neon via-blue-500 to-purple-600 rounded-[2.2rem] blur opacity-40 animate-pulse"></div>
+                     
+                     <div className="relative bg-pitch-950 bg-carbon rounded-[2rem] p-1 border border-white/10 shadow-2xl">
+                         {/* Card Inner Content */}
+                         <div className="bg-gradient-to-b from-pitch-900/90 to-black/95 rounded-[1.8rem] p-6 text-white backdrop-blur-sm relative overflow-hidden">
+                             
+                             {/* Background Shine */}
+                             <div className="absolute top-0 right-0 w-[200%] h-full bg-gradient-to-l from-transparent via-white/5 to-transparent skew-x-12 pointer-events-none"></div>
+            
+                             <div className="flex justify-between items-start mb-4 relative z-10">
+                                 <div className="flex flex-col">
+                                    <span className="text-6xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-neon to-green-600 leading-none filter drop-shadow-sm">
+                                        {viewingPlayer.role === UserRole.OWNER ? '92' : viewingPlayer.stats?.rating || '75'}
+                                    </span>
+                                    <span className="text-sm uppercase font-bold text-pitch-300 tracking-widest ml-1">OVR</span>
+                                 </div>
+                                 <div className="text-right">
+                                     <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Flag_of_Brazil.svg" className="w-10 h-7 rounded shadow-md inline-block mb-1 border border-white/10" />
+                                     <p className="text-xs font-bold text-pitch-400 tracking-wide uppercase">
+                                         {viewingPlayer.role === UserRole.OWNER ? 'DONO' : viewingPlayer.position || 'JOGADOR'}
+                                     </p>
+                                 </div>
+                             </div>
+                             
+                             <div className="relative w-48 h-48 mx-auto mb-2 z-10">
+                                 <div className="absolute inset-0 bg-neon/20 rounded-full blur-[50px] opacity-50"></div>
+                                 <img src={viewingPlayer.avatarUrl} className="w-full h-full object-cover drop-shadow-[0_20px_20px_rgba(0,0,0,0.8)] z-20 relative rounded-xl" />
+                             </div>
+                             
+                             <h2 className="text-4xl font-display font-bold text-center uppercase tracking-wider mb-2 pb-2 border-b border-white/10 relative z-10">
+                                {viewingPlayer.name}
+                             </h2>
+                             <p className="text-center text-gray-400 text-xs uppercase tracking-widest mb-4 relative z-10">{viewingPlayer.bio || "Sem biografia..."}</p>
+                             
+                             <div className="grid grid-cols-3 gap-2 text-center relative z-10">
+                                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                                    <span className="block font-display text-2xl font-bold text-neon">{viewingPlayer.stats?.matchesPlayed || 0}</span>
+                                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Jogos</span>
+                                 </div>
+                                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                                    <span className="block font-display text-2xl font-bold text-neon">{viewingPlayer.stats?.goals || 0}</span>
+                                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Gols</span>
+                                 </div>
+                                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                                    <span className="block font-display text-2xl font-bold text-gold">{viewingPlayer.stats?.mvps || 0}</span>
+                                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">MVP</span>
+                                 </div>
+                             </div>
+
+                             {/* Badges Preview */}
+                             {viewingPlayer.badges && viewingPlayer.badges.length > 0 && (
+                                 <div className="mt-4 pt-4 border-t border-white/10 flex gap-2 justify-center overflow-x-auto">
+                                     {viewingPlayer.badges.map((b, i) => (
+                                         <div key={i} className="text-xl bg-black/40 p-1.5 rounded-lg border border-white/5" title={b}>🏆</div>
+                                     ))}
+                                 </div>
+                             )}
+                         </div>
+                     </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {showMatchLogger && userRole === UserRole.OWNER && (
           <MatchLogger 

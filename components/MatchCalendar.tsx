@@ -5,9 +5,10 @@ interface MatchCalendarProps {
   matches: Match[];
   teams: Team[];
   currentUser: User;
+  onViewPlayer?: (user: User) => void;
 }
 
-export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, currentUser }) => {
+export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, currentUser, onViewPlayer }) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [scope, setScope] = useState<'all' | 'mine'>('all');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -373,7 +374,11 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                                     <h4 className="text-[10px] text-neon uppercase font-bold mb-3 border-b border-neon/20 pb-1 text-center">Mandante</h4>
                                     <div className="space-y-2">
                                         {getTeamPlayers(selectedMatch.homeTeamId).map(p => (
-                                            <div key={p.id} className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg">
+                                            <div 
+                                                key={p.id} 
+                                                onClick={() => onViewPlayer && onViewPlayer(p)} // CLICK HANDLER ADDED
+                                                className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                                            >
                                                 <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />
                                                 <div>
                                                     <p className="text-[10px] font-bold text-white truncate max-w-[80px]">{p.name}</p>
@@ -390,7 +395,11 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                                     <h4 className="text-[10px] text-white uppercase font-bold mb-3 border-b border-white/20 pb-1 text-center">Visitante</h4>
                                     <div className="space-y-2">
                                         {getTeamPlayers(selectedMatch.awayTeamId).map(p => (
-                                            <div key={p.id} className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg">
+                                            <div 
+                                                key={p.id} 
+                                                onClick={() => onViewPlayer && onViewPlayer(p)} // CLICK HANDLER ADDED
+                                                className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                                            >
                                                 <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />
                                                 <div>
                                                     <p className="text-[10px] font-bold text-white truncate max-w-[80px]">{p.name}</p>

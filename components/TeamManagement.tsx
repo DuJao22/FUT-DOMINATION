@@ -5,9 +5,10 @@ import { dbService } from '../services/database';
 interface TeamManagementProps {
   team: Team;
   currentUserRole: UserRole;
+  onViewPlayer?: (user: User) => void;
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUserRole }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUserRole, onViewPlayer }) => {
   const [localTeam, setLocalTeam] = useState<Team>(team);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingLogo, setIsEditingLogo] = useState(false);
@@ -149,7 +150,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {localTeam.players.map(player => (
-                  <div key={player.id} className="bg-white/5 border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-white/10 transition-all">
+                  <div 
+                    key={player.id} 
+                    onClick={() => onViewPlayer && onViewPlayer(player)} // CLICK HANDLER ADDED
+                    className="bg-white/5 border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-neon/30 hover:bg-white/10 transition-all cursor-pointer group"
+                  >
                       <div className="relative">
                            <img src={player.avatarUrl} className="w-12 h-12 rounded-full object-cover bg-gray-800" />
                            {player.role === UserRole.OWNER && (
@@ -157,7 +162,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                            )}
                       </div>
                       <div>
-                          <p className="font-bold text-white text-sm">{player.name}</p>
+                          <p className="font-bold text-white text-sm group-hover:text-neon transition-colors">{player.name}</p>
                           <p className="text-xs text-gray-500 font-mono">{player.position} • Camisa {player.shirtNumber || '-'}</p>
                       </div>
                       {player.stats && (
