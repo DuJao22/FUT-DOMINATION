@@ -366,7 +366,7 @@ const App: React.FC = () => {
             {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
-            {currentTab === 'team' && <TeamManagement team={myTeam} currentUserRole={userRole} onViewPlayer={handleViewPlayer} />}
+            {currentTab === 'team' && <TeamManagement team={myTeam} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}

@@ -48,6 +48,7 @@ export interface Team {
   id: string;
   name: string;
   logoUrl: string;
+  bio?: string; // NEW: Biography for the profile
   wins: number;
   losses: number;
   draws: number;

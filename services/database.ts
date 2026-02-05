@@ -1,7 +1,7 @@
 import { Database } from '@sqlitecloud/drivers';
 import { 
   User, Team, Match, Territory, Court, PickupGame, 
-  Notification, UserRole, MatchStatus, MatchGoal 
+  Notification, UserRole, MatchStatus, MatchGoal, Post 
 } from '../types';
 
 // Fallback connection string for development/demo stability
@@ -23,38 +23,53 @@ class DatabaseService {
   }
 
   /**
-   * Wrapper for SQL execution with Retry/Reconnect logic.
-   * This fixes "Connection unavailable" errors by re-initializing the driver if it disconnects.
+   * Wrapper for SQL execution with Robust Retry/Reconnect logic.
+   * This fixes "Connection unavailable", "xhr poll error", and "Disconnected" errors.
    */
-  private async executeQuery(sql: string): Promise<any> {
-      try {
-          return await this.db.sql(sql);
-      } catch (error: any) {
-          const errMsg = error?.message || JSON.stringify(error);
-          
-          // Detect disconnection or connection availability issues
-          if (
-              errMsg.includes("Connection unavailable") || 
-              errMsg.includes("Disconnected") || 
-              errMsg.includes("Socket closed") ||
-              errMsg.includes("Network Error")
-          ) {
-              console.warn("⚠️ DB Connection lost. Reconnecting and retrying...", errMsg);
+  private async executeQuery(sql: string, retries = 3): Promise<any> {
+      for (let i = 0; i < retries; i++) {
+          try {
+              // Attempt the query
+              return await this.db.sql(sql);
+          } catch (error: any) {
+              const isLastAttempt = i === retries - 1;
+              const errMsg = error?.message || JSON.stringify(error);
               
-              // Force re-initialization of the driver
-              try {
-                  this.db = new Database(this.connectionString);
-                  // Small delay to allow socket handshake
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                  // Retry the query once
-                  return await this.db.sql(sql);
-              } catch (retryError) {
-                  console.error("❌ Retry failed:", retryError);
-                  throw retryError;
+              // Detect disconnection, network issues, or specific polling errors
+              if (
+                  errMsg.includes("Connection unavailable") || 
+                  errMsg.includes("Disconnected") || 
+                  errMsg.includes("Socket closed") ||
+                  errMsg.includes("Network Error") ||
+                  errMsg.includes("xhr poll error") || // Specific fix for the reported error
+                  errMsg.includes("fetch failed")
+              ) {
+                  console.warn(`⚠️ DB Connection Unstable (Attempt ${i + 1}/${retries}). Reconnecting...`, errMsg);
+                  
+                  if (isLastAttempt) {
+                      console.error("❌ All DB retries failed. Final Error:", errMsg);
+                      throw error;
+                  }
+                  
+                  // Force re-initialization of the driver to clear stale state
+                  try {
+                      this.db = new Database(this.connectionString);
+                      
+                      // Exponential backoff: Wait 500ms, then 1000ms, then 2000ms
+                      const delay = 500 * Math.pow(2, i);
+                      await new Promise(resolve => setTimeout(resolve, delay));
+                      
+                      // Continue to next iteration of loop to retry this.db.sql()
+                      continue; 
+                  } catch (reinitError) {
+                      console.error("❌ Failed to re-initialize DB driver:", reinitError);
+                      if (isLastAttempt) throw reinitError;
+                  }
+              } else {
+                  // If it's a SQL syntax error or logic error (not network), throw immediately
+                  throw error;
               }
           }
-          
-          throw error;
       }
   }
 
@@ -174,6 +189,7 @@ class DatabaseService {
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 logo_url TEXT,
+                bio TEXT,
                 wins INTEGER DEFAULT 0,
                 losses INTEGER DEFAULT 0,
                 draws INTEGER DEFAULT 0,
@@ -281,6 +297,25 @@ class DatabaseService {
             );
         `);
 
+        // 8. Posts (New for Feed)
+        await this.executeQuery(`
+            CREATE TABLE IF NOT EXISTS posts (
+                id TEXT PRIMARY KEY,
+                author_id TEXT NOT NULL,
+                author_role TEXT,
+                content TEXT NOT NULL,
+                image_url TEXT,
+                likes INTEGER DEFAULT 0,
+                timestamp TEXT NOT NULL,
+                team_id TEXT,
+                match_opponent TEXT,
+                match_result TEXT,
+                match_location TEXT,
+                FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE
+            );
+        `);
+
         // --- AUTO-MIGRATIONS (SELF-HEALING) ---
         // Tries to add columns if they are missing from older DB versions.
         try { await this.executeQuery(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0;`); } catch (e) {}
@@ -295,6 +330,7 @@ class DatabaseService {
         try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN city TEXT;`); } catch (e) {}
         try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN state TEXT;`); } catch (e) {}
         try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN neighborhood TEXT;`); } catch (e) {}
+        try { await this.executeQuery(`ALTER TABLE teams ADD COLUMN bio TEXT;`); } catch (e) {}
 
         console.log("✅ Database Schema Synced with SQLite Cloud");
     } catch (error) {
@@ -334,6 +370,7 @@ class DatabaseService {
           id: row.id,
           name: row.name,
           logoUrl: row.logo_url,
+          bio: row.bio,
           wins: row.wins,
           losses: row.losses,
           draws: row.draws,
@@ -605,6 +642,20 @@ class DatabaseService {
       } catch (e) { return { success: false }; }
   }
 
+  async followTeam(userId: string, teamId: string): Promise<boolean> {
+      try {
+          await this.executeQuery(`INSERT INTO user_follows (user_id, team_id) VALUES ('${userId}', '${teamId}')`);
+          return true;
+      } catch(e) { return false; }
+  }
+
+  async unfollowTeam(userId: string, teamId: string): Promise<boolean> {
+      try {
+          await this.executeQuery(`DELETE FROM user_follows WHERE user_id = '${userId}' AND team_id = '${teamId}'`);
+          return true;
+      } catch(e) { return false; }
+  }
+
   // --- INTERACTION ACTIONS (Likes & Ratings) ---
 
   async likePlayer(targetUserId: string, likerUserId: string, likerName: string): Promise<boolean> {
@@ -698,6 +749,16 @@ class DatabaseService {
       }
   }
 
+  async createPost(post: Post): Promise<boolean> {
+      try {
+          await this.executeQuery(`
+            INSERT INTO posts (id, author_id, author_role, content, image_url, likes, timestamp, team_id, match_opponent, match_result, match_location)
+            VALUES ('${post.id}', '${post.authorId}', '${post.authorRole}', '${post.content}', '${post.imageUrl || ''}', 0, '${post.timestamp.toISOString()}', '${post.teamId}', '${post.matchContext?.opponentName || ''}', '${post.matchContext?.result || ''}', '${post.matchContext?.location || ''}')
+          `);
+          return true;
+      } catch(e) { return false; }
+  }
+
   async createPickupGame(game: PickupGame): Promise<boolean> {
       try {
           const playersJson = JSON.stringify(game.confirmedPlayers);
@@ -709,9 +770,9 @@ class DatabaseService {
       } catch (e) { return false; }
   }
 
-  async updateTeamInfo(id: string, name: string, logoUrl: string): Promise<void> {
+  async updateTeamInfo(id: string, name: string, logoUrl: string, bio?: string): Promise<void> {
       try {
-          await this.executeQuery(`UPDATE teams SET name = '${name}', logo_url = '${logoUrl}' WHERE id = '${id}'`);
+          await this.executeQuery(`UPDATE teams SET name = '${name}', logo_url = '${logoUrl}', bio = '${bio || ''}' WHERE id = '${id}'`);
       } catch (e) { console.error(e); }
   }
 
