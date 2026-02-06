@@ -6,12 +6,17 @@ interface TeamManagementProps {
   team: Team;
   currentUser: User; // We need the whole user object now for following logic
   onViewPlayer?: (user: User) => void;
+  onRefreshData?: () => void; // New Prop for syncing
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUser, onViewPlayer }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUser, onViewPlayer, onRefreshData }) => {
   const [localTeam, setLocalTeam] = useState<Team>(team);
   const [activeTab, setActiveTab] = useState<'posts' | 'squad' | 'schedule'>('squad');
   
+  // Stats State
+  const [followers, setFollowers] = useState<User[]>([]);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+
   // Edit Profile State
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -29,29 +34,65 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       opponent: '',
       myScore: '',
       oppScore: '',
-      location: ''
+      location: '',
+      imageUrl: '' // New Image Field
   });
 
   // Follow State
   const [isFollowing, setIsFollowing] = useState(currentUser.following.includes(team.id));
 
-  const isOwner = currentUser.role === UserRole.OWNER && currentUser.teamId === team.id;
+  // ROBUST OWNER CHECK: If current user ID matches team owner ID, they are the owner.
+  const isOwner = currentUser.id === team.ownerId;
 
+  // IMPORTANT: Only update local state if NOT editing.
+  // This prevents the "name reverting" bug when background refresh polling happens.
   useEffect(() => {
-      setLocalTeam(team);
-      setEditForm({ name: team.name, bio: team.bio || '', logoUrl: team.logoUrl });
-      setIsFollowing(currentUser.following.includes(team.id));
-  }, [team, currentUser]);
+      if (!isEditing) {
+          setLocalTeam(team);
+          setEditForm({ name: team.name, bio: team.bio || '', logoUrl: team.logoUrl });
+          setIsFollowing(currentUser.following.includes(team.id));
+      }
+      
+      // Fetch Followers
+      dbService.getTeamFollowers(team.id).then(users => setFollowers(users));
+  }, [team, currentUser, isEditing]);
 
   // --- HANDLERS ---
 
   const handleSaveProfile = async () => {
       setIsSaving(true);
       try {
-          await dbService.updateTeamInfo(localTeam.id, editForm.name, editForm.logoUrl, editForm.bio);
-          setLocalTeam(prev => ({ ...prev, name: editForm.name, logoUrl: editForm.logoUrl, bio: editForm.bio }));
+          let targetId = localTeam.id;
+          
+          // CRITICAL FIX: If the team ID is 'temp_team' (fallback from App.tsx), it means the user's team
+          // was deleted or doesn't exist. We must generate a NEW ID and INSERT it.
+          // Or if targetId is null/undefined.
+          if (targetId === 'temp_team' || !targetId || targetId.startsWith('temp')) {
+              targetId = `t-${Date.now()}`;
+              // Update user to point to this new team ID so they don't lose access
+              await dbService.executeQuery(`UPDATE users SET team_id = '${targetId}' WHERE id = '${currentUser.id}'`);
+          }
+
+          // Use the robust save method (Upsert logic)
+          await dbService.saveTeamProfile(targetId, currentUser.id, editForm.name, editForm.logoUrl, editForm.bio);
+          
+          // Optimistic update to UI so it feels instant
+          const updatedTeam = { 
+              ...localTeam, 
+              id: targetId,
+              name: editForm.name, 
+              logoUrl: editForm.logoUrl, 
+              bio: editForm.bio 
+          };
+          setLocalTeam(updatedTeam);
+          
+          // Force refresh immediately
+          if (onRefreshData) {
+              onRefreshData();
+          }
+          
           setIsEditing(false);
-          alert("Perfil atualizado com sucesso!");
+          alert("Perfil salvo com sucesso!");
       } catch (e) {
           alert("Erro ao salvar perfil.");
       } finally {
@@ -62,15 +103,21 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
   const handleToggleFollow = async () => {
       if (isFollowing) {
           const success = await dbService.unfollowTeam(currentUser.id, team.id);
-          if (success) setIsFollowing(false);
+          if (success) {
+              setIsFollowing(false);
+              setFollowers(prev => prev.filter(u => u.id !== currentUser.id));
+          }
       } else {
           const success = await dbService.followTeam(currentUser.id, team.id);
-          if (success) setIsFollowing(true);
+          if (success) {
+              setIsFollowing(true);
+              setFollowers(prev => [...prev, currentUser]);
+          }
       }
   };
 
   const handleCreatePost = async () => {
-      if (!postForm.content) return;
+      if (!postForm.content && !postForm.imageUrl) return; // Allow just image or just text
       setIsSaving(true);
 
       const newPost: Post = {
@@ -79,6 +126,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
           authorName: localTeam.name,
           authorRole: UserRole.OWNER,
           content: postForm.content,
+          imageUrl: postForm.imageUrl, // Handle image
           likes: 0,
           timestamp: new Date(),
           teamId: localTeam.id,
@@ -94,7 +142,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       if (success) {
           alert("Post publicado no feed!");
           setIsCreatingPost(false);
-          setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '' });
+          setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '', imageUrl: '' });
       } else {
           alert("Erro ao publicar.");
       }
@@ -163,9 +211,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                           <span className="block font-bold text-white text-lg">{localTeam.wins}</span>
                           <span className="text-[10px] text-gray-500 uppercase tracking-wide">Vitórias</span>
                       </div>
-                      <div>
-                          <span className="block font-bold text-white text-lg">{localTeam.players.length}</span>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Elenco</span>
+                      {/* Clickable Followers Count */}
+                      <div onClick={() => setShowFollowersModal(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                          <span className="block font-bold text-white text-lg">{followers.length}</span>
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Seguidores</span>
                       </div>
                   </div>
 
@@ -198,6 +247,33 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
               </p>
           </div>
       </div>
+
+      {/* --- FOLLOWERS LIST MODAL --- */}
+      {showFollowersModal && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowFollowersModal(false)}>
+              <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/50 rounded-t-2xl">
+                      <h3 className="font-bold text-white text-lg">Seguidores ({followers.length})</h3>
+                      <button onClick={() => setShowFollowersModal(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                  </div>
+                  <div className="overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                      {followers.length === 0 ? (
+                          <p className="text-center text-gray-500 py-4">Nenhum seguidor ainda.</p>
+                      ) : (
+                          followers.map(follower => (
+                              <div key={follower.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5">
+                                  <img src={follower.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
+                                  <div className="flex-1">
+                                      <p className="text-white font-bold text-sm">{follower.name}</p>
+                                      <p className="text-[10px] text-gray-400 uppercase">{follower.role === UserRole.OWNER ? 'Dono de Time' : follower.role === UserRole.PLAYER ? 'Jogador' : 'Torcedor'}</p>
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* --- EDIT MODAL (OWNER) --- */}
       {isEditing && (
@@ -259,9 +335,21 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                       <textarea 
                           value={postForm.content}
                           onChange={e => setPostForm({...postForm, content: e.target.value})}
-                          className="w-full bg-black border border-white/10 rounded-xl p-4 text-white placeholder-gray-600 focus:outline-none h-24 resize-none"
+                          className="w-full bg-black border border-white/10 rounded-xl p-4 text-white placeholder-gray-600 focus:outline-none h-20 resize-none"
                           placeholder={postType === 'match' ? "Comentário sobre o jogo..." : "O que está acontecendo no clube?"}
                       />
+
+                      {/* Image Input */}
+                      <div>
+                          <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Foto / Vídeo (URL)</label>
+                          <input 
+                              type="text" 
+                              value={postForm.imageUrl}
+                              onChange={e => setPostForm({...postForm, imageUrl: e.target.value})}
+                              className="w-full bg-black border border-white/10 rounded-lg p-2 text-white text-xs placeholder-gray-700 focus:border-neon focus:outline-none"
+                              placeholder="https://..."
+                          />
+                      </div>
 
                       {postType === 'match' && (
                           <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
@@ -289,7 +377,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
 
                       <div className="flex gap-2 pt-2">
                           <button onClick={() => setIsCreatingPost(false)} className="flex-1 bg-white/10 text-white font-bold py-3 rounded-xl">Cancelar</button>
-                          <button onClick={handleCreatePost} disabled={isSaving || !postForm.content} className="flex-1 bg-neon text-black font-bold py-3 rounded-xl">
+                          <button onClick={handleCreatePost} disabled={isSaving || (!postForm.content && !postForm.imageUrl)} className="flex-1 bg-neon text-black font-bold py-3 rounded-xl">
                               Publicar
                           </button>
                       </div>

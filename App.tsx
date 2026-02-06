@@ -259,8 +259,18 @@ const App: React.FC = () => {
       );
   }
 
+  // --- CRITICAL FIX: Ensure 'myTeam' always has the correct ownerId if the user is an owner ---
   const myTeam = teams.find(t => t.id === activeUser.teamId) || {
-    id: 'temp', name: 'Sem Time', logoUrl: '', wins:0, losses:0, draws:0, players:[], territoryColor:'#ccc', category: 'Society', ownerId:'' 
+    id: activeUser.teamId || 'temp_team', 
+    name: 'Sem Time', 
+    logoUrl: 'https://via.placeholder.com/150/000000/FFFFFF/?text=LOGO', 
+    wins: 0, 
+    losses: 0, 
+    draws: 0, 
+    players: [], 
+    territoryColor: '#39ff14', 
+    category: 'Society', 
+    ownerId: activeUser.role === UserRole.OWNER ? activeUser.id : '' // Force ownership if fallback
   } as Team;
 
   const userRole = activeUser.role;
@@ -366,7 +376,7 @@ const App: React.FC = () => {
             {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
-            {currentTab === 'team' && <TeamManagement team={myTeam} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+            {currentTab === 'team' && <TeamManagement team={myTeam} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}
