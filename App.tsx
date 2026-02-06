@@ -1,21 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Navigation } from './components/Navigation';
-import { TerritoryMap } from './components/TerritoryMap';
-import { Feed } from './components/Feed';
 import { Auth } from './components/Auth';
 import { Onboarding } from './components/Onboarding';
-import { TeamManagement } from './components/TeamManagement';
-import { MatchLogger } from './components/MatchLogger';
-import { MatchCalendar } from './components/MatchCalendar';
-import { PickupSoccer } from './components/PickupSoccer'; 
-import { Profile } from './components/Profile';
-import { Rankings } from './components/Rankings';
-import { TransferMarket } from './components/TransferMarket';
+import { LandingPage } from './components/LandingPage'; 
 import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
-import { LandingPage } from './components/LandingPage'; 
+import { MatchLogger } from './components/MatchLogger'; // Keep critical modal eager or lazy based on pref, eager for owner speed
 import { UserRole, User, Team, Match, Territory, Court, PickupGame, Post } from './types';
 import { dbService } from './services/database';
+
+// --- LAZY LOADED COMPONENTS ---
+// Only load these heavy components when the user actually clicks the tab
+const TerritoryMap = React.lazy(() => import('./components/TerritoryMap').then(m => ({ default: m.TerritoryMap })));
+const Feed = React.lazy(() => import('./components/Feed').then(m => ({ default: m.Feed })));
+const MatchCalendar = React.lazy(() => import('./components/MatchCalendar').then(m => ({ default: m.MatchCalendar })));
+const PickupSoccer = React.lazy(() => import('./components/PickupSoccer').then(m => ({ default: m.PickupSoccer })));
+const TeamManagement = React.lazy(() => import('./components/TeamManagement').then(m => ({ default: m.TeamManagement })));
+const TransferMarket = React.lazy(() => import('./components/TransferMarket').then(m => ({ default: m.TransferMarket })));
+const Profile = React.lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
+const Rankings = React.lazy(() => import('./components/Rankings').then(m => ({ default: m.Rankings })));
+
+// Simple Loading Spinner for Suspense
+const TabLoader = () => (
+    <div className="flex flex-col items-center justify-center h-[50vh] text-neon animate-pulse">
+        <div className="w-8 h-8 border-4 border-neon border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-xs font-bold uppercase tracking-widest">Carregando...</p>
+    </div>
+);
 
 const App: React.FC = () => {
   const [activeUser, setActiveUser] = useState<User | null>(null);
@@ -45,9 +56,6 @@ const App: React.FC = () => {
   const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
 
-  // Polling Interval Ref
-  const intervalRef = useRef<number | null>(null);
-
   // --- 1. INITIALIZATION & SESSION ---
   useEffect(() => {
     const initApp = async () => {
@@ -61,7 +69,6 @@ const App: React.FC = () => {
             // 3. Restore Session
             const storedUserId = localStorage.getItem('fut_dom_user_id');
             if (storedUserId) {
-                console.log("🔄 Restoring session for:", storedUserId);
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
@@ -91,21 +98,21 @@ const App: React.FC = () => {
       const loadTabData = async () => {
           if (!activeUser) return;
 
+          // Only fetch heavy data if the tab is active
           switch (currentTab) {
               case 'feed':
-                  const fPosts = await dbService.getPosts();
-                  setPosts(fPosts);
+                  if(posts.length === 0) setPosts(await dbService.getPosts());
                   break;
               case 'calendar':
               case 'profile':
-                  const fMatches = await dbService.getMatches();
+                  const fMatches = await dbService.getMatches(); // Always refresh matches to see latest results
                   const fPickupsCal = await dbService.getPickupGames();
                   setMatches(fMatches);
                   setPickupGames(fPickupsCal);
                   break;
               case 'pickup':
                   const fPickups = await dbService.getPickupGames();
-                  const fCourts = await dbService.getCourts(); // Needed for map inside pickup
+                  const fCourts = await dbService.getCourts(); 
                   setPickupGames(fPickups);
                   setCourts(fCourts);
                   break;
@@ -303,7 +310,6 @@ const App: React.FC = () => {
       );
   }
 
-  // --- CRITICAL FIX: Ensure 'myTeam' always has the correct ownerId if the user is an owner ---
   const myTeam = teams.find(t => t.id === activeUser.teamId) || {
     id: activeUser.teamId || 'temp_team', 
     name: 'Sem Time', 
@@ -314,7 +320,7 @@ const App: React.FC = () => {
     players: [], 
     territoryColor: '#39ff14', 
     category: 'Society', 
-    ownerId: activeUser.role === UserRole.OWNER ? activeUser.id : '' // Force ownership if fallback
+    ownerId: activeUser.role === UserRole.OWNER ? activeUser.id : '' 
   } as Team;
 
   const userRole = activeUser.role;
@@ -371,60 +377,63 @@ const App: React.FC = () => {
 
         <div className="px-0 md:px-8 max-w-7xl mx-auto h-full md:mt-4">
           
-          {currentTab === 'map' && (
-             <div className="fixed inset-0 md:static md:h-auto md:w-full z-0 bg-pitch-950">
-                 <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-10 md:hidden"></div>
-                 <div className="fixed top-4 right-4 z-20 md:hidden pointer-events-auto flex gap-2">
-                        <button id="header-notifs-btn" onClick={() => setShowNotifications(true)} className="p-2.5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 relative shadow-lg active:scale-95 transition-transform">
-                             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                             {hasUnread && <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-black shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>}
-                        </button>
-                        <div id="header-profile-btn" className="w-11 h-11 rounded-full border-2 border-neon p-0.5 shadow-[0_0_10px_rgba(57,255,20,0.3)] bg-black/40 backdrop-blur cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
-                           <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+          <Suspense fallback={<TabLoader />}>
+            {currentTab === 'map' && (
+                <div className="fixed inset-0 md:static md:h-auto md:w-full z-0 bg-pitch-950">
+                    {/* Mobile Header Overlays */}
+                    <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-10 md:hidden"></div>
+                    <div className="fixed top-4 right-4 z-20 md:hidden pointer-events-auto flex gap-2">
+                            <button id="header-notifs-btn" onClick={() => setShowNotifications(true)} className="p-2.5 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 relative shadow-lg active:scale-95 transition-transform">
+                                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                {hasUnread && <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-black shadow-[0_0_5px_rgba(239,68,68,0.8)]"></div>}
+                            </button>
+                            <div id="header-profile-btn" className="w-11 h-11 rounded-full border-2 border-neon p-0.5 shadow-[0_0_10px_rgba(57,255,20,0.3)] bg-black/40 backdrop-blur cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentTab('profile')}>
+                            <img src={activeUser.avatarUrl} className="w-full h-full rounded-full object-cover" />
+                            </div>
+                    </div>
+                    
+                    {userRole === UserRole.OWNER && (
+                        <div className="hidden md:flex justify-end mb-4 relative z-10">
+                            <button 
+                                onClick={() => setShowMatchLogger(true)}
+                                className="bg-neon text-pitch-950 font-display font-bold text-xl px-8 py-2 rounded-xl shadow-neon hover:shadow-neon-hover hover:scale-105 transition-all flex items-center gap-2"
+                            >
+                                <span>⚔️</span> REGISTRAR JOGO OFICIAL
+                            </button>
                         </div>
-                 </div>
-                 
-                 {userRole === UserRole.OWNER && (
-                    <div className="hidden md:flex justify-end mb-4 relative z-10">
-                        <button 
-                            onClick={() => setShowMatchLogger(true)}
-                            className="bg-neon text-pitch-950 font-display font-bold text-xl px-8 py-2 rounded-xl shadow-neon hover:shadow-neon-hover hover:scale-105 transition-all flex items-center gap-2"
-                        >
-                            <span>⚔️</span> REGISTRAR JOGO OFICIAL
-                        </button>
-                    </div>
-                 )}
-                 {userRole === UserRole.OWNER && (
-                    <div className="fixed top-20 right-4 z-20 md:hidden pointer-events-auto">
-                        <button 
-                            onClick={() => setShowMatchLogger(true)}
-                            className="bg-neon text-pitch-950 w-12 h-12 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(57,255,20,0.5)] font-bold text-2xl active:scale-90 transition-transform animate-pulse-slow border-2 border-white"
-                        >
-                            ⚔️
-                        </button>
-                    </div>
-                 )}
+                    )}
+                    {userRole === UserRole.OWNER && (
+                        <div className="fixed top-20 right-4 z-20 md:hidden pointer-events-auto">
+                            <button 
+                                onClick={() => setShowMatchLogger(true)}
+                                className="bg-neon text-pitch-950 w-12 h-12 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(57,255,20,0.5)] font-bold text-2xl active:scale-90 transition-transform animate-pulse-slow border-2 border-white"
+                            >
+                                ⚔️
+                            </button>
+                        </div>
+                    )}
 
-                 <TerritoryMap 
-                    territories={territories} 
-                    teams={teams} 
-                    courts={courts}
-                    pickupGames={pickupGames}
-                    currentUser={activeUser}
-                    onCourtAdded={refreshData}
-                 />
-             </div>
-          )}
+                    <TerritoryMap 
+                        territories={territories} 
+                        teams={teams} 
+                        courts={courts}
+                        pickupGames={pickupGames}
+                        currentUser={activeUser}
+                        onCourtAdded={refreshData}
+                    />
+                </div>
+            )}
 
-          <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
-            {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-            {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} pickupGames={pickupGames} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-            {currentTab === 'feed' && <Feed posts={posts} teams={teams} currentUser={activeUser} />}
-            {currentTab === 'team' && <TeamManagement team={myTeam} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
-            {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-            {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
-            {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}
-          </div>
+            <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
+                {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+                {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} pickupGames={pickupGames} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+                {currentTab === 'feed' && <Feed posts={posts} teams={teams} currentUser={activeUser} />}
+                {currentTab === 'team' && <TeamManagement team={myTeam} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
+                {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+                {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
+                {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}
+            </div>
+          </Suspense>
         </div>
       </main>
 
