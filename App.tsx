@@ -15,7 +15,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
 import { LandingPage } from './components/LandingPage'; 
 import { MOCK_POSTS } from './constants'; 
-import { UserRole, User, Team, Match, Territory, Court, PickupGame } from './types';
+import { UserRole, User, Team, Match, Territory, Court, PickupGame, Post } from './types';
 import { dbService } from './services/database';
 
 const App: React.FC = () => {
@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
 
   // Polling Interval Ref
   const intervalRef = useRef<number | null>(null);
@@ -137,18 +138,20 @@ const App: React.FC = () => {
       }
 
       // 2. Fetch Global Data
-      const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
+      const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup, fetchedPosts] = await Promise.all([
         dbService.getTeams(),
         dbService.getMatches(),
         dbService.getTerritories(),
         dbService.getCourts(),
-        dbService.getPickupGames()
+        dbService.getPickupGames(),
+        dbService.getPosts()
       ]);
       setTeams(fetchedTeams);
       setMatches(fetchedMatches);
       setTerritories(fetchedTerritories);
       setCourts(fetchedCourts);
       setPickupGames(fetchedPickup);
+      setPosts(fetchedPosts);
   };
 
   const handleLogin = (user: User) => {
@@ -394,7 +397,7 @@ const App: React.FC = () => {
           <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
             {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-            {currentTab === 'feed' && <Feed posts={MOCK_POSTS} currentUser={activeUser} />}
+            {currentTab === 'feed' && <Feed posts={posts} teams={teams} currentUser={activeUser} />}
             {currentTab === 'team' && <TeamManagement team={myTeam} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}

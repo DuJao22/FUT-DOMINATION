@@ -137,8 +137,6 @@ export class DatabaseService {
         `);
 
         // ... existing schema code ...
-        // To save space in response, I'm assuming the rest of initSchema is unchanged
-        // but ensuring the structure is valid.
         
         await this.executeQuery(`CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, logo_url TEXT, bio TEXT, wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0, draws INTEGER DEFAULT 0, territory_color TEXT, owner_id TEXT, category TEXT, home_turf TEXT, city TEXT, state TEXT, neighborhood TEXT, FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL);`);
         await this.executeQuery(`CREATE TABLE IF NOT EXISTS user_follows (user_id TEXT NOT NULL, team_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, team_id));`);
@@ -233,6 +231,22 @@ export class DatabaseService {
     } catch (e) { return []; }
   }
 
+  // --- NEW: GET FREE AGENTS ---
+  async getFreeAgents(): Promise<User[]> {
+      try {
+          // Users without a team AND not owners
+          const rows = await this.executeQuery(`
+              SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating 
+              FROM users u 
+              LEFT JOIN player_stats s ON u.id = s.user_id 
+              WHERE (u.team_id IS NULL OR u.team_id = '') 
+              AND u.role != 'OWNER'
+              ORDER BY s.rating DESC, u.created_at DESC
+          `);
+          return rows.map((r: any) => this.mapUser(r));
+      } catch (e) { return []; }
+  }
+
   async getTeamFollowers(teamId: string): Promise<User[]> {
       try {
           const rows = await this.executeQuery(`
@@ -266,179 +280,47 @@ export class DatabaseService {
     } catch (e) { return []; }
   }
 
-  async getTerritories(): Promise<Territory[]> {
+  async getPosts(): Promise<Post[]> {
     try {
-        const rows = await this.executeQuery(`SELECT * FROM territories`);
+        const rows = await this.executeQuery(`
+            SELECT p.*, u.name as author_name 
+            FROM posts p 
+            LEFT JOIN users u ON p.author_id = u.id 
+            ORDER BY p.timestamp DESC
+        `);
         return rows.map((row: any) => ({
             id: row.id,
-            name: row.name,
-            ownerTeamId: row.owner_team_id,
-            lat: row.lat,
-            lng: row.lng,
-            points: row.points
+            authorId: row.author_id,
+            authorName: row.author_name || 'Desconhecido',
+            authorRole: row.author_role as UserRole,
+            content: row.content,
+            imageUrl: row.image_url,
+            likes: row.likes || 0,
+            timestamp: new Date(row.timestamp),
+            teamId: row.team_id,
+            comments: [], 
+            matchContext: row.match_opponent ? {
+                opponentName: row.match_opponent,
+                result: row.match_result,
+                location: row.match_location
+            } : undefined
         }));
     } catch (e) { return []; }
   }
 
-  async getCourts(): Promise<Court[]> {
-    try {
-        const rows = await this.executeQuery(`SELECT * FROM courts`);
-        return rows.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            address: row.address,
-            cep: row.cep,
-            number: row.number,
-            phone: row.phone,
-            lat: row.lat,
-            lng: row.lng,
-            registeredByTeamId: row.registered_by_team_id,
-            isPaid: !!row.is_paid,
-            rating: row.rating || 0,
-            ratingCount: row.rating_count || 0
-        }));
-    } catch (e) { return []; }
-  }
-
-  async getPickupGames(): Promise<PickupGame[]> {
-    try {
-        const rows = await this.executeQuery(`SELECT * FROM pickup_games WHERE date >= date('now', '-1 day') ORDER BY date ASC`);
-        return rows.map((row: any) => ({
-            id: row.id,
-            hostId: row.host_id,
-            hostName: row.host_name,
-            title: row.title,
-            description: row.description,
-            date: new Date(row.date),
-            locationName: row.location_name,
-            lat: row.lat,
-            lng: row.lng,
-            maxPlayers: row.max_players,
-            price: row.price,
-            confirmedPlayers: row.confirmed_players ? JSON.parse(row.confirmed_players) : []
-        }));
-    } catch (e) { return []; }
-  }
-
-  async getUserById(id: string): Promise<User | null> {
-    try {
-        const rows = await this.executeQuery(`SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating FROM users u LEFT JOIN player_stats s ON u.id = s.user_id WHERE u.id = '${id}'`);
-        if (rows.length === 0) return null;
-        const userRow = rows[0];
-        const badgeRows = await this.executeQuery(`SELECT badge_name FROM user_badges WHERE user_id = '${id}'`);
-        const badges = badgeRows.map((b: any) => b.badge_name);
-        const followRows = await this.executeQuery(`SELECT team_id FROM user_follows WHERE user_id = '${id}'`);
-        const following = followRows.map((f: any) => f.team_id);
-        return { ...this.mapUser(userRow), badges, following };
-    } catch (e) { return null; }
-  }
-
-  async getUsersByIds(ids: string[]): Promise<User[]> {
-      if (ids.length === 0) return [];
-      try {
-          const idsStr = ids.map(id => `'${id}'`).join(',');
-          const rows = await this.executeQuery(`SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating FROM users u LEFT JOIN player_stats s ON u.id = s.user_id WHERE u.id IN (${idsStr})`);
-          return rows.map((r: any) => this.mapUser(r));
-      } catch (e) { return []; }
-  }
-
-  async getNotifications(userId: string): Promise<Notification[]> {
-      try {
-          const rows = await this.executeQuery(`SELECT * FROM notifications WHERE user_id = '${userId}' ORDER BY timestamp DESC`);
-          return rows.map((row: any) => ({
-              id: row.id,
-              userId: row.user_id,
-              type: row.type,
-              title: row.title,
-              message: row.message,
-              relatedId: row.related_id,
-              relatedImage: row.related_image,
-              read: !!row.read,
-              timestamp: new Date(row.timestamp),
-              actionData: row.action_data ? JSON.parse(row.action_data) : undefined
-          }));
-      } catch (e) { return []; }
-  }
-
-  // --- ACTIONS ---
-  async registerUser(user: User, password?: string): Promise<boolean> {
-      try {
-          const safeName = this.escape(user.name);
-          const safeBio = this.escape(user.bio || "");
-          await this.executeQuery(`INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed, likes) VALUES ('${user.id}', '${safeName}', '${user.email}', '${user.role}', '${user.avatarUrl}', '${safeBio}', '${user.location}', 0, 0)`);
-          await this.executeQuery(`INSERT INTO player_stats (user_id) VALUES ('${user.id}')`);
-          return true;
-      } catch (e) { throw e; }
-  }
-
-  async loginUser(email: string): Promise<User | null> {
-      const rows = await this.executeQuery(`SELECT id FROM users WHERE email = '${email}'`);
-      if (rows.length > 0) return this.getUserById(rows[0].id);
-      return null;
-  }
-
-  async completeOnboarding(userId: string, role: UserRole, profileData: any, teamData?: any): Promise<{success: boolean, user?: User}> {
-      try {
-          const safeName = this.escape(profileData.name);
-          let updateQuery = `UPDATE users SET name = '${safeName}', location = '${profileData.location}', avatar_url = '${profileData.avatarUrl}', role = '${role}', onboarding_completed = 1`;
-          if (role === UserRole.PLAYER) updateQuery += `, position = '${profileData.position}', shirt_number = ${profileData.shirtNumber}`;
-          updateQuery += ` WHERE id = '${userId}'`;
-          await this.executeQuery(updateQuery);
-
-          if (role === UserRole.OWNER && teamData) {
-              const newTeamId = `t-${Date.now()}`;
-              const safeTeamName = this.escape(teamData.name);
-              await this.executeQuery(`INSERT INTO teams (id, name, logo_url, territory_color, owner_id, category, home_turf, city, state, neighborhood, wins, losses, draws) VALUES ('${newTeamId}', '${safeTeamName}', '${teamData.logoUrl}', '#39ff14', '${userId}', '${teamData.category}', '${teamData.homeTurf}', '${teamData.city}', '${teamData.state}', '${teamData.neighborhood}', 0, 0, 0)`);
-              await this.executeQuery(`UPDATE users SET team_id = '${newTeamId}' WHERE id = '${userId}'`);
-          }
-          const updatedUser = await this.getUserById(userId);
-          return { success: true, user: updatedUser || undefined };
-      } catch (e) { return { success: false }; }
-  }
-
-  // --- ROBUST TEAM UPDATE (UPSERT LOGIC) ---
-  async saveTeamProfile(id: string, ownerId: string, name: string, logoUrl: string, bio: string): Promise<boolean> {
-      try {
-          const safeName = this.escape(name);
-          const safeBio = this.escape(bio);
-          
-          // 1. Check if team exists
-          const check = await this.executeQuery(`SELECT id FROM teams WHERE id = '${id}'`);
-          
-          if (check.length === 0) {
-              // 2. Insert new (Restore lost team)
-              console.log("Restoring missing team:", id);
-              await this.executeQuery(`INSERT INTO teams (id, name, logo_url, bio, owner_id, territory_color, category, wins, losses, draws) VALUES ('${id}', '${safeName}', '${logoUrl}', '${safeBio}', '${ownerId}', '#39ff14', 'Society', 0, 0, 0)`);
-          } else {
-              // 3. Update existing
-              console.log("Updating existing team:", id);
-              await this.executeQuery(`UPDATE teams SET name = '${safeName}', logo_url = '${logoUrl}', bio = '${safeBio}' WHERE id = '${id}'`);
-          }
-          return true;
-      } catch (e) {
-          console.error("Save Team Error:", e);
-          return false;
-      }
-  }
-
-  async updateTeamInfo(id: string, name: string, logoUrl: string, bio?: string): Promise<void> {
-      // Legacy method, redirects to basic update
-      try { 
-          const safeName = this.escape(name);
-          const safeBio = this.escape(bio || "");
-          await this.executeQuery(`UPDATE teams SET name = '${safeName}', logo_url = '${logoUrl}', bio = '${safeBio}' WHERE id = '${id}'`); 
-      } catch (e) { console.error("Update failed", e); throw e; }
-  }
-
-  async updateUserProfile(user: User): Promise<boolean> {
-      try { 
-          const safeName = this.escape(user.name);
-          const safeBio = this.escape(user.bio || "");
-          await this.executeQuery(`UPDATE users SET name = '${safeName}', bio = '${safeBio}', location = '${user.location}', avatar_url = '${user.avatarUrl}' WHERE id = '${user.id}'`); return true; 
-      } catch (e) { return false; }
-  }
-
-  // ... (Other existing methods like promotePlayerToOwner, removePlayerFromTeam etc remain unchanged for brevity, but are included in the class)
+  // ... (rest of methods)
+  async getTerritories(): Promise<Territory[]> { try { const rows = await this.executeQuery(`SELECT * FROM territories`); return rows.map((row: any) => ({ id: row.id, name: row.name, ownerTeamId: row.owner_team_id, lat: row.lat, lng: row.lng, points: row.points })); } catch (e) { return []; } }
+  async getCourts(): Promise<Court[]> { try { const rows = await this.executeQuery(`SELECT * FROM courts`); return rows.map((row: any) => ({ id: row.id, name: row.name, address: row.address, cep: row.cep, number: row.number, phone: row.phone, lat: row.lat, lng: row.lng, registeredByTeamId: row.registered_by_team_id, isPaid: !!row.is_paid, rating: row.rating || 0, ratingCount: row.rating_count || 0 })); } catch (e) { return []; } }
+  async getPickupGames(): Promise<PickupGame[]> { try { const rows = await this.executeQuery(`SELECT * FROM pickup_games WHERE date >= date('now', '-1 day') ORDER BY date ASC`); return rows.map((row: any) => ({ id: row.id, hostId: row.host_id, hostName: row.host_name, title: row.title, description: row.description, date: new Date(row.date), locationName: row.location_name, lat: row.lat, lng: row.lng, maxPlayers: row.max_players, price: row.price, confirmedPlayers: row.confirmed_players ? JSON.parse(row.confirmed_players) : [] })); } catch (e) { return []; } }
+  async getUserById(id: string): Promise<User | null> { try { const rows = await this.executeQuery(`SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating FROM users u LEFT JOIN player_stats s ON u.id = s.user_id WHERE u.id = '${id}'`); if (rows.length === 0) return null; const userRow = rows[0]; const badgeRows = await this.executeQuery(`SELECT badge_name FROM user_badges WHERE user_id = '${id}'`); const badges = badgeRows.map((b: any) => b.badge_name); const followRows = await this.executeQuery(`SELECT team_id FROM user_follows WHERE user_id = '${id}'`); const following = followRows.map((f: any) => f.team_id); return { ...this.mapUser(userRow), badges, following }; } catch (e) { return null; } }
+  async getUsersByIds(ids: string[]): Promise<User[]> { if (ids.length === 0) return []; try { const idsStr = ids.map(id => `'${id}'`).join(','); const rows = await this.executeQuery(`SELECT u.*, s.matches_played, s.goals, s.mvps, s.rating FROM users u LEFT JOIN player_stats s ON u.id = s.user_id WHERE u.id IN (${idsStr})`); return rows.map((r: any) => this.mapUser(r)); } catch (e) { return []; } }
+  async getNotifications(userId: string): Promise<Notification[]> { try { const rows = await this.executeQuery(`SELECT * FROM notifications WHERE user_id = '${userId}' ORDER BY timestamp DESC`); return rows.map((row: any) => ({ id: row.id, userId: row.user_id, type: row.type, title: row.title, message: row.message, relatedId: row.related_id, relatedImage: row.related_image, read: !!row.read, timestamp: new Date(row.timestamp), actionData: row.action_data ? JSON.parse(row.action_data) : undefined })); } catch (e) { return []; } }
+  async registerUser(user: User, password?: string): Promise<boolean> { try { const safeName = this.escape(user.name); const safeBio = this.escape(user.bio || ""); await this.executeQuery(`INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed, likes) VALUES ('${user.id}', '${safeName}', '${user.email}', '${user.role}', '${user.avatarUrl}', '${safeBio}', '${user.location}', 0, 0)`); await this.executeQuery(`INSERT INTO player_stats (user_id) VALUES ('${user.id}')`); return true; } catch (e) { throw e; } }
+  async loginUser(email: string): Promise<User | null> { const rows = await this.executeQuery(`SELECT id FROM users WHERE email = '${email}'`); if (rows.length > 0) return this.getUserById(rows[0].id); return null; }
+  async completeOnboarding(userId: string, role: UserRole, profileData: any, teamData?: any): Promise<{success: boolean, user?: User}> { try { const safeName = this.escape(profileData.name); let updateQuery = `UPDATE users SET name = '${safeName}', location = '${profileData.location}', avatar_url = '${profileData.avatarUrl}', role = '${role}', onboarding_completed = 1`; if (role === UserRole.PLAYER) updateQuery += `, position = '${profileData.position}', shirt_number = ${profileData.shirtNumber}`; updateQuery += ` WHERE id = '${userId}'`; await this.executeQuery(updateQuery); if (role === UserRole.OWNER && teamData) { const newTeamId = `t-${Date.now()}`; const safeTeamName = this.escape(teamData.name); await this.executeQuery(`INSERT INTO teams (id, name, logo_url, territory_color, owner_id, category, home_turf, city, state, neighborhood, wins, losses, draws) VALUES ('${newTeamId}', '${safeTeamName}', '${teamData.logoUrl}', '#39ff14', '${userId}', '${teamData.category}', '${teamData.homeTurf}', '${teamData.city}', '${teamData.state}', '${teamData.neighborhood}', 0, 0, 0)`); await this.executeQuery(`UPDATE users SET team_id = '${newTeamId}' WHERE id = '${userId}'`); const postId = `p-${Date.now()}`; const timestamp = new Date().toISOString(); const content = `O ${safeTeamName} chegou para dominar o bairro ${teamData.neighborhood}! 🚩`; await this.executeQuery(`INSERT INTO posts (id, author_id, author_role, content, image_url, likes, timestamp, team_id, match_opponent, match_result, match_location) VALUES ('${postId}', '${userId}', 'OWNER', '${this.escape(content)}', '${teamData.logoUrl}', 0, '${timestamp}', '${newTeamId}', '', '', '')`); } const updatedUser = await this.getUserById(userId); return { success: true, user: updatedUser || undefined }; } catch (e) { return { success: false }; } }
+  async saveTeamProfile(id: string, ownerId: string, name: string, logoUrl: string, bio: string): Promise<boolean> { try { const safeName = this.escape(name); const safeBio = this.escape(bio); const check = await this.executeQuery(`SELECT id, name FROM teams WHERE id = '${id}'`); let shouldCreatePost = false; let postContent = ""; if (check.length === 0) { console.log("Restoring/Creating team:", id); await this.executeQuery(`INSERT INTO teams (id, name, logo_url, bio, owner_id, territory_color, category, wins, losses, draws) VALUES ('${id}', '${safeName}', '${logoUrl}', '${safeBio}', '${ownerId}', '#39ff14', 'Society', 0, 0, 0)`); shouldCreatePost = true; postContent = `O ${safeName} acabou de ser fundado e entrou na disputa! ⚽🔥`; } else { const oldName = check[0].name; console.log("Updating existing team:", id); await this.executeQuery(`UPDATE teams SET name = '${safeName}', logo_url = '${logoUrl}', bio = '${safeBio}' WHERE id = '${id}'`); if (oldName !== safeName) { shouldCreatePost = true; postContent = `O time mudou de nome! Agora somos ${safeName}. 🔄`; } } if (shouldCreatePost) { const postId = `p-${Date.now()}`; const timestamp = new Date().toISOString(); await this.executeQuery(`INSERT INTO posts (id, author_id, author_role, content, image_url, likes, timestamp, team_id, match_opponent, match_result, match_location) VALUES ('${postId}', '${ownerId}', 'OWNER', '${this.escape(postContent)}', '${logoUrl}', 0, '${timestamp}', '${id}', '', '', '')`); } return true; } catch (e) { console.error("Save Team Error:", e); return false; } }
+  async updateTeamInfo(id: string, name: string, logoUrl: string, bio?: string): Promise<void> { try { const safeName = this.escape(name); const safeBio = this.escape(bio || ""); await this.executeQuery(`UPDATE teams SET name = '${safeName}', logo_url = '${logoUrl}', bio = '${safeBio}' WHERE id = '${id}'`); } catch (e) { console.error("Update failed", e); throw e; } }
+  async updateUserProfile(user: User): Promise<boolean> { try { const safeName = this.escape(user.name); const safeBio = this.escape(user.bio || ""); await this.executeQuery(`UPDATE users SET name = '${safeName}', bio = '${safeBio}', location = '${user.location}', avatar_url = '${user.avatarUrl}' WHERE id = '${user.id}'`); return true; } catch (e) { return false; } }
   async promotePlayerToOwner(userId: string, teamId: string): Promise<{success: boolean, message: string}> { try { const owners = await this.executeQuery(`SELECT count(*) as count FROM users WHERE team_id = '${teamId}' AND role = 'OWNER'`); if ((owners[0]?.count || 0) >= 5) return { success: false, message: 'Limite de 5 donos atingido.' }; await this.executeQuery(`UPDATE users SET role = 'OWNER' WHERE id = '${userId}'`); return { success: true, message: 'Jogador promovido.' }; } catch (e) { return { success: false, message: 'Erro.' }; } }
   async removePlayerFromTeam(userId: string): Promise<{success: boolean}> { try { await this.executeQuery(`UPDATE users SET team_id = NULL, role = 'FAN' WHERE id = '${userId}'`); return { success: true }; } catch (e) { return { success: false }; } }
   async followTeam(userId: string, teamId: string): Promise<boolean> { try { await this.executeQuery(`INSERT INTO user_follows (user_id, team_id) VALUES ('${userId}', '${teamId}')`); return true; } catch(e) { return false; } }

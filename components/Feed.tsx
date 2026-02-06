@@ -1,31 +1,36 @@
-import React, { useState } from 'react';
-import { Post, User, Comment, UserRole } from '../types';
-import { MOCK_TEAMS } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { Post, User, Comment, UserRole, Team } from '../types';
 
 interface FeedProps {
   posts: Post[];
+  teams: Team[];
   currentUser: User;
 }
 
-export const Feed: React.FC<FeedProps> = ({ posts: initialPosts, currentUser }) => {
+export const Feed: React.FC<FeedProps> = ({ posts: initialPosts, teams, currentUser }) => {
   const [activeTab, setActiveTab] = useState<'following' | 'explore'>('following');
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
 
+  // Update local state when parent posts change (e.g. from DB fetch)
+  useEffect(() => {
+      setPosts(initialPosts);
+  }, [initialPosts]);
+
   // --- Filtering Logic ---
   
   // 1. Filter posts from followed teams
   const followingPosts = posts
-    .filter(post => currentUser.following.includes(post.teamId))
+    .filter(post => currentUser.following.includes(post.teamId) || post.teamId === currentUser.teamId) // Include own team posts in following
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  // 2. Filter explore posts (Anyone NOT followed)
+  // 2. Filter explore posts (Anyone NOT followed AND NOT own team)
   const explorePosts = posts
-    .filter(post => !currentUser.following.includes(post.teamId))
+    .filter(post => !currentUser.following.includes(post.teamId) && post.teamId !== currentUser.teamId)
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  const isFollowingEmpty = currentUser.following.length === 0;
+  const isFollowingEmpty = currentUser.following.length === 0 && !currentUser.teamId;
   
   const displayPosts = activeTab === 'following' && !isFollowingEmpty ? followingPosts : explorePosts;
 
@@ -70,7 +75,7 @@ export const Feed: React.FC<FeedProps> = ({ posts: initialPosts, currentUser }) 
   };
 
   // --- Helper to get Team Info ---
-  const getTeamInfo = (teamId: string) => MOCK_TEAMS.find(t => t.id === teamId);
+  const getTeamInfo = (teamId: string) => teams.find(t => t.id === teamId);
 
   return (
     <div className="space-y-6 pb-24 max-w-2xl mx-auto">
@@ -110,6 +115,10 @@ export const Feed: React.FC<FeedProps> = ({ posts: initialPosts, currentUser }) 
 
       {/* Posts List */}
       <div className="space-y-8 px-4 md:px-0">
+        {displayPosts.length === 0 && !isFollowingEmpty && (
+            <p className="text-center text-gray-500 py-10">Nenhuma postagem encontrada.</p>
+        )}
+
         {displayPosts.map((post) => {
           const team = getTeamInfo(post.teamId);
           const isOwnerPost = post.authorRole === UserRole.OWNER;
@@ -137,7 +146,7 @@ export const Feed: React.FC<FeedProps> = ({ posts: initialPosts, currentUser }) 
                             {isOwnerPost && <span className="text-blue-400 text-xs" title="Perfil Oficial">✓</span>}
                         </h4>
                         <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                            @{post.authorName.replace(/\s/g, '').toLowerCase()} • <span className="text-gray-500">2h atrás</span>
+                            @{post.authorName ? post.authorName.replace(/\s/g, '').toLowerCase() : 'usuario'} • <span className="text-gray-500">{post.timestamp.toLocaleDateString()}</span>
                         </p>
                     </div>
                 </div>
