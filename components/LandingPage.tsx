@@ -21,13 +21,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
           </div>
           <div className="flex items-center gap-6">
             <button onClick={onGetStarted} className="hidden md:block text-sm font-bold text-gray-400 hover:text-white transition-colors uppercase tracking-widest">
-                Login
+                Entrar
             </button>
             <button 
                 onClick={onGetStarted}
                 className="bg-white text-black px-8 py-2.5 rounded-full font-bold text-sm hover:bg-neon hover:scale-105 hover:shadow-[0_0_20px_rgba(57,255,20,0.4)] transition-all uppercase tracking-wide"
             >
-                Acessar Sistema
+                Fazer Login
             </button>
           </div>
         </div>
@@ -71,7 +71,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               className="w-full md:w-auto bg-neon text-black font-display font-bold text-3xl px-12 py-5 rounded-2xl hover:scale-105 hover:shadow-[0_0_50px_rgba(57,255,20,0.5)] transition-all uppercase tracking-wide flex items-center justify-center gap-3 group relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 skew-y-12"></div>
-              <span className="relative">Criar Conta Grátis</span>
+              <span className="relative">Fazer Login</span>
               <svg className="w-6 h-6 relative group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
             </button>
             <p className="text-xs text-gray-500 font-mono uppercase tracking-widest mt-2 md:mt-0 opacity-80 hover:opacity-100 transition-opacity">
@@ -98,7 +98,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                       </div>
                   </div>
 
-                  {/* Update 2 (Former Update 3) */}
+                  {/* Update 2 (Social Feed) */}
                   <div className="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-neon/30 transition-colors">
                       <div className="bg-green-500/20 text-green-400 p-3 rounded-xl text-2xl">📡</div>
                       <div>
@@ -318,12 +318,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                   </p>
 
                   <div className="flex flex-col md:flex-row justify-center gap-4">
-                      <a href="mailto:parcerias@fut-domination.com" className="bg-gold text-black font-bold px-8 py-4 rounded-xl hover:bg-white transition-all shadow-[0_0_30px_rgba(251,191,36,0.3)] uppercase tracking-wide flex items-center justify-center gap-2">
-                          <span>🤝</span> Seja um Patrocinador
+                      <a 
+                        href="https://wa.me/5531995281707?text=Ol%C3%A1%20Jo%C3%A3o%20Layon%2C%20tenho%20interesse%20em%20ser%20um%20patrocinador%20do%20FUT-DOMINATION."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-gold text-black font-bold px-12 py-4 rounded-xl hover:bg-white transition-all shadow-[0_0_30px_rgba(251,191,36,0.3)] uppercase tracking-wide flex items-center justify-center gap-2 transform hover:scale-105"
+                      >
+                          <span>💬</span> Seja um Patrocinador
                       </a>
-                      <button className="text-gold hover:text-white font-bold px-8 py-4 rounded-xl border border-gold/30 hover:border-gold transition-all uppercase tracking-wide">
-                          Baixar Mídia Kit
-                      </button>
                   </div>
               </div>
           </div>
@@ -343,7 +345,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                     onClick={onGetStarted}
                     className="bg-white text-black font-bold text-lg px-12 py-4 rounded-xl hover:bg-gray-200 transition-transform hover:scale-105 shadow-[0_0_30px_rgba(255,255,255,0.2)]"
                    >
-                       Criar Conta Grátis
+                       Fazer Login
                    </button>
                    <button className="text-gray-400 hover:text-white font-bold px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 transition-all">
                        Ver Demo
