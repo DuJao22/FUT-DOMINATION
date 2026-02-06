@@ -18,6 +18,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
   const [followers, setFollowers] = useState<User[]>([]);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
 
+  // Posts State
+  const [teamPosts, setTeamPosts] = useState<Post[]>([]);
+  const [viewingPost, setViewingPost] = useState<Post | null>(null);
+
   // Edit Profile State
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -57,11 +61,19 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
           setIsFollowing(currentUser.following.includes(team.id));
       }
       
-      // Fetch Followers only if it's a real team
+      // Fetch Followers & Posts only if it's a real team
       if (team.id !== 'temp_team') {
           dbService.getTeamFollowers(team.id).then(users => setFollowers(users));
+          fetchTeamPosts();
       }
   }, [team, currentUser, isEditing]);
+
+  const fetchTeamPosts = async () => {
+      const allPosts = await dbService.getPosts();
+      // Filter posts belonging to this team
+      const myPosts = allPosts.filter(p => p.teamId === team.id).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      setTeamPosts(myPosts);
+  };
 
   // --- HANDLERS ---
 
@@ -157,10 +169,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
 
           const success = await dbService.createPost(newPost);
           if (success) {
-              alert("Post publicado no feed!");
+              alert("Post publicado!");
               setIsCreatingPost(false);
               setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '', imageUrl: '' });
-              if (onRefreshData) onRefreshData(); // Refresh feed immediately
+              
+              // Refresh local list immediately
+              fetchTeamPosts();
+              
+              if (onRefreshData) onRefreshData(); // Refresh global feed
           } else {
               alert("Erro ao publicar. Verifique sua conexão.");
           }
@@ -281,7 +297,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
               <div className="flex-1">
                   <div className="flex justify-around text-center mb-4">
                       <div>
-                          <span className="block font-bold text-white text-lg">---</span>
+                          <span className="block font-bold text-white text-lg">{teamPosts.length}</span>
                           <span className="text-[10px] text-gray-500 uppercase tracking-wide">Posts</span>
                       </div>
                       <div>
@@ -347,6 +363,49 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
                               </div>
                           ))
                       )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- VIEW POST MODAL --- */}
+      {viewingPost && (
+          <div className="fixed inset-0 bg-black/95 z-[2000] flex items-center justify-center p-4 animate-fadeIn" onClick={() => setViewingPost(null)}>
+              <div className="w-full max-w-md bg-pitch-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                  <div className="relative">
+                      {viewingPost.imageUrl ? (
+                          <img src={viewingPost.imageUrl} className="w-full max-h-[50vh] object-cover" />
+                      ) : (
+                          <div className="h-48 bg-gradient-to-br from-pitch-800 to-black flex items-center justify-center p-6 text-center">
+                              <p className="font-display font-bold text-2xl text-white italic">"{viewingPost.content}"</p>
+                          </div>
+                      )}
+                      <button onClick={() => setViewingPost(null)} className="absolute top-4 right-4 bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-black">✕</button>
+                  </div>
+                  <div className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-bold text-white">{viewingPost.authorName}</h4>
+                          <span className="text-xs text-gray-500">{new Date(viewingPost.timestamp).toLocaleDateString()}</span>
+                      </div>
+                      
+                      {viewingPost.imageUrl && (
+                          <p className="text-gray-300 text-sm mb-4">{viewingPost.content}</p>
+                      )}
+
+                      {viewingPost.matchContext && (
+                          <div className="bg-white/5 p-3 rounded-xl border border-white/5 mb-4">
+                              <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold text-gray-400 uppercase">Resultado</span>
+                                  <span className="font-display font-bold text-lg text-white">{viewingPost.matchContext.result}</span>
+                              </div>
+                              <p className="text-xs text-gray-500">vs {viewingPost.matchContext.opponentName}</p>
+                          </div>
+                      )}
+
+                      <div className="flex gap-4 text-gray-400 text-sm border-t border-white/5 pt-4">
+                          <span className="flex items-center gap-1">❤️ {viewingPost.likes}</span>
+                          <span className="flex items-center gap-1">💬 {viewingPost.comments.length}</span>
+                      </div>
                   </div>
               </div>
           </div>
@@ -529,24 +588,37 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
               </div>
           )}
 
-          {/* POSTS TAB (Placeholder Grid) */}
+          {/* POSTS TAB (REAL DATA GRID) */}
           {activeTab === 'posts' && (
               <div className="grid grid-cols-3 gap-1 animate-fadeIn">
-                  {/* Since we don't have posts linked fully yet in this view, showing placeholders or real implementation later. 
-                      Ideally this would map over 'posts' from DB related to teamId. For now, showing empty state or static. */}
-                  <div className="aspect-square bg-white/5 flex items-center justify-center text-gray-600 border border-white/5">
-                      📷
-                  </div>
-                  <div className="aspect-square bg-white/5 flex items-center justify-center text-gray-600 border border-white/5">
-                      📷
-                  </div>
-                  <div className="aspect-square bg-white/5 flex items-center justify-center text-gray-600 border border-white/5">
-                      📷
-                  </div>
-                  {/* In a real implementation, you'd fetch posts here */}
-                  <div className="col-span-3 text-center py-8 text-gray-500 text-xs">
-                      Vá para o <b>Feed do Clube</b> para ver todas as postagens em detalhe.
-                  </div>
+                  {teamPosts.length === 0 ? (
+                      <div className="col-span-3 text-center py-12 text-gray-500 bg-white/5 rounded-xl">
+                          <span className="text-2xl block mb-2">📸</span>
+                          <p className="text-xs">Ainda não há publicações.</p>
+                      </div>
+                  ) : (
+                      teamPosts.map(post => (
+                          <div 
+                              key={post.id} 
+                              onClick={() => setViewingPost(post)}
+                              className="aspect-square bg-pitch-900 border border-white/5 relative group cursor-pointer overflow-hidden"
+                          >
+                              {post.imageUrl ? (
+                                  <img src={post.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                              ) : (
+                                  <div className="w-full h-full bg-gradient-to-br from-pitch-800 to-black flex items-center justify-center p-2">
+                                      <p className="text-[10px] text-gray-300 text-center line-clamp-3 italic">"{post.content}"</p>
+                                  </div>
+                              )}
+                              
+                              {/* Overlay on hover */}
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white font-bold text-xs">
+                                  <span>❤️ {post.likes}</span>
+                                  <span>💬 {post.comments.length}</span>
+                              </div>
+                          </div>
+                      ))
+                  )}
               </div>
           )}
 
