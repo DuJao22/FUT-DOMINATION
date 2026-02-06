@@ -4,12 +4,13 @@ import { dbService } from '../services/database';
 
 interface TeamManagementProps {
   team: Team;
+  teams: Team[]; // Add full list of teams to suggest
   currentUser: User; // We need the whole user object now for following logic
   onViewPlayer?: (user: User) => void;
   onRefreshData?: () => void; // New Prop for syncing
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUser, onViewPlayer, onRefreshData }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, currentUser, onViewPlayer, onRefreshData }) => {
   const [localTeam, setLocalTeam] = useState<Team>(team);
   const [activeTab, setActiveTab] = useState<'posts' | 'squad' | 'schedule'>('squad');
   
@@ -44,6 +45,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
   // ROBUST OWNER CHECK: If current user ID matches team owner ID, they are the owner.
   const isOwner = currentUser.id === team.ownerId;
 
+  // Check if User is a Fan/Player WITHOUT a team (showing the fallback 'temp_team')
+  const hasNoTeam = !isOwner && (team.id === 'temp_team' || !currentUser.teamId);
+
   // IMPORTANT: Only update local state if NOT editing.
   // This prevents the "name reverting" bug when background refresh polling happens.
   useEffect(() => {
@@ -53,8 +57,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
           setIsFollowing(currentUser.following.includes(team.id));
       }
       
-      // Fetch Followers
-      dbService.getTeamFollowers(team.id).then(users => setFollowers(users));
+      // Fetch Followers only if it's a real team
+      if (team.id !== 'temp_team') {
+          dbService.getTeamFollowers(team.id).then(users => setFollowers(users));
+      }
   }, [team, currentUser, isEditing]);
 
   // --- HANDLERS ---
@@ -117,36 +123,53 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
   };
 
   const handleCreatePost = async () => {
-      if (!postForm.content && !postForm.imageUrl) return; // Allow just image or just text
+      // Validation
+      if (!postForm.content && !postForm.imageUrl) return; 
+      
+      // Safety check for unsaved teams
+      if (localTeam.id === 'temp_team' || localTeam.id.startsWith('temp')) {
+          alert("Por favor, edite e SALVE o perfil do time antes de publicar.");
+          setIsEditing(true);
+          setIsCreatingPost(false);
+          return;
+      }
+
       setIsSaving(true);
 
-      const newPost: Post = {
-          id: `p-${Date.now()}`,
-          authorId: currentUser.id,
-          authorName: localTeam.name,
-          authorRole: UserRole.OWNER,
-          content: postForm.content,
-          imageUrl: postForm.imageUrl, // Handle image
-          likes: 0,
-          timestamp: new Date(),
-          teamId: localTeam.id,
-          comments: [],
-          matchContext: postType === 'match' ? {
-              opponentName: postForm.opponent,
-              result: `${postForm.myScore} - ${postForm.oppScore}`,
-              location: postForm.location
-          } : undefined
-      };
+      try {
+          const newPost: Post = {
+              id: `p-${Date.now()}`,
+              authorId: currentUser.id,
+              authorName: localTeam.name, // Post as Team Name
+              authorRole: UserRole.OWNER,
+              content: postForm.content,
+              imageUrl: postForm.imageUrl, 
+              likes: 0,
+              timestamp: new Date(),
+              teamId: localTeam.id,
+              comments: [],
+              matchContext: postType === 'match' && (postForm.opponent || postForm.myScore) ? {
+                  opponentName: postForm.opponent || 'Adversário',
+                  result: `${postForm.myScore || 0} - ${postForm.oppScore || 0}`,
+                  location: postForm.location
+              } : undefined
+          };
 
-      const success = await dbService.createPost(newPost);
-      if (success) {
-          alert("Post publicado no feed!");
-          setIsCreatingPost(false);
-          setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '', imageUrl: '' });
-      } else {
-          alert("Erro ao publicar.");
+          const success = await dbService.createPost(newPost);
+          if (success) {
+              alert("Post publicado no feed!");
+              setIsCreatingPost(false);
+              setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '', imageUrl: '' });
+              if (onRefreshData) onRefreshData(); // Refresh feed immediately
+          } else {
+              alert("Erro ao publicar. Verifique sua conexão.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Erro técnico ao publicar.");
+      } finally {
+          setIsSaving(false);
       }
-      setIsSaving(false);
   };
 
   const handlePromotePlayer = async (e: React.MouseEvent, playerId: string) => {
@@ -182,6 +205,60 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
       }
   };
 
+  // --- RENDER FOR FANS/PLAYERS WITHOUT TEAM ---
+  if (hasNoTeam) {
+      return (
+          <div className="pb-24 max-w-4xl mx-auto px-4 mt-8">
+              <div className="text-center py-10 bg-white/5 rounded-3xl border border-dashed border-white/10 animate-fadeIn">
+                  <div className="w-20 h-20 bg-pitch-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                      <span className="text-4xl opacity-50">💔</span>
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-white uppercase italic">Você não tem time</h2>
+                  <p className="text-gray-400 text-sm mt-2 max-w-md mx-auto">
+                      Como torcedor ou agente livre, você precisa encontrar um clube para seguir ou jogar.
+                  </p>
+              </div>
+
+              {/* Suggested Teams to Follow */}
+              <div className="mt-8">
+                  <h3 className="text-white font-bold uppercase tracking-widest text-xs mb-4 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-neon rounded-full animate-pulse"></span>
+                      Clubes em Destaque
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {teams.filter(t => t.id !== 'temp_team').slice(0, 4).map((t) => {
+                          const isFollowingT = currentUser.following.includes(t.id);
+                          return (
+                              <div key={t.id} className="bg-white/5 p-4 rounded-2xl flex items-center gap-4 border border-white/5">
+                                  <img src={t.logoUrl} className="w-14 h-14 rounded-full object-cover bg-black" />
+                                  <div className="flex-1">
+                                      <h4 className="text-white font-bold">{t.name}</h4>
+                                      <p className="text-gray-500 text-xs">{t.neighborhood || t.homeTurf || 'Sem local'}</p>
+                                  </div>
+                                  <button 
+                                      onClick={async () => {
+                                          if(isFollowingT) {
+                                              await dbService.unfollowTeam(currentUser.id, t.id);
+                                          } else {
+                                              await dbService.followTeam(currentUser.id, t.id);
+                                          }
+                                          if(onRefreshData) onRefreshData();
+                                      }}
+                                      className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${isFollowingT ? 'bg-white/10 text-white' : 'bg-blue-600 text-white'}`}
+                                  >
+                                      {isFollowingT ? 'Seguindo' : 'Seguir'}
+                                  </button>
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // --- RENDER FOR TEAM MEMBERS / OWNERS ---
   return (
     <div className="pb-24 max-w-4xl mx-auto">
       
@@ -378,7 +455,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                       <div className="flex gap-2 pt-2">
                           <button onClick={() => setIsCreatingPost(false)} className="flex-1 bg-white/10 text-white font-bold py-3 rounded-xl">Cancelar</button>
                           <button onClick={handleCreatePost} disabled={isSaving || (!postForm.content && !postForm.imageUrl)} className="flex-1 bg-neon text-black font-bold py-3 rounded-xl">
-                              Publicar
+                              {isSaving ? 'Enviando...' : 'Publicar'}
                           </button>
                       </div>
                   </div>
@@ -468,7 +545,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, currentUse
                   </div>
                   {/* In a real implementation, you'd fetch posts here */}
                   <div className="col-span-3 text-center py-8 text-gray-500 text-xs">
-                      Postagens aparecerão aqui no feed do clube.
+                      Vá para o <b>Feed do Clube</b> para ver todas as postagens em detalhe.
                   </div>
               </div>
           )}

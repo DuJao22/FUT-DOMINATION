@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK(role IN ('OWNER', 'PLAYER', 'FAN')),
+    role TEXT NOT NULL CHECK(role IN ('OWNER', 'PLAYER')),
     team_id TEXT,
     avatar_url TEXT,
     bio TEXT,

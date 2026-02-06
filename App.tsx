@@ -14,7 +14,6 @@ import { TransferMarket } from './components/TransferMarket';
 import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
 import { LandingPage } from './components/LandingPage'; 
-import { MOCK_POSTS } from './constants'; 
 import { UserRole, User, Team, Match, Territory, Court, PickupGame, Post } from './types';
 import { dbService } from './services/database';
 
@@ -38,30 +37,31 @@ const App: React.FC = () => {
 
   // --- APP STATE (FROM DB) ---
   const [teams, setTeams] = useState<Team[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
+  
+  // Lazy Loaded States
+  const [matches, setMatches] = useState<Match[]>([]);
   const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
 
   // Polling Interval Ref
   const intervalRef = useRef<number | null>(null);
 
-  // --- INITIALIZATION & SESSION ---
+  // --- 1. INITIALIZATION & SESSION ---
   useEffect(() => {
     const initApp = async () => {
         try {
             // 1. Initialize Database Schema
             await dbService.initSchema();
 
-            // 2. Fetch Real Data
-            await refreshData();
+            // 2. Fetch Core Data (User, Teams, Territories)
+            await initCoreData();
 
             // 3. Restore Session
             const storedUserId = localStorage.getItem('fut_dom_user_id');
             if (storedUserId) {
                 console.log("🔄 Restoring session for:", storedUserId);
-                // We use the ID from localStorage to fetch, ensuring fresh data on reload
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
@@ -84,17 +84,51 @@ const App: React.FC = () => {
     };
 
     initApp();
-
-    // --- AUTO-UPDATE POLLING (SIMULATES REAL-TIME) ---
-    // Polls every 15 seconds to check for new data
-    intervalRef.current = window.setInterval(() => {
-        refreshData();
-    }, 15000);
-
-    return () => {
-        if (intervalRef.current) window.clearInterval(intervalRef.current);
-    };
   }, []);
+
+  // --- 2. LAZY LOAD DATA BASED ON TAB ---
+  useEffect(() => {
+      const loadTabData = async () => {
+          if (!activeUser) return;
+
+          switch (currentTab) {
+              case 'feed':
+                  const fPosts = await dbService.getPosts();
+                  setPosts(fPosts);
+                  break;
+              case 'calendar':
+              case 'profile':
+                  const fMatches = await dbService.getMatches();
+                  const fPickupsCal = await dbService.getPickupGames();
+                  setMatches(fMatches);
+                  setPickupGames(fPickupsCal);
+                  break;
+              case 'pickup':
+                  const fPickups = await dbService.getPickupGames();
+                  const fCourts = await dbService.getCourts(); // Needed for map inside pickup
+                  setPickupGames(fPickups);
+                  setCourts(fCourts);
+                  break;
+              case 'map':
+                  // Map data is core, but refresh if coming back
+                  const rTerritories = await dbService.getTerritories();
+                  const rCourts = await dbService.getCourts();
+                  const rTeams = await dbService.getTeams();
+                  setTerritories(rTerritories);
+                  setCourts(rCourts);
+                  setTeams(rTeams);
+                  break;
+              case 'team':
+              case 'market':
+                  // Teams are core, but ensure fresh
+                  const tTeams = await dbService.getTeams();
+                  setTeams(tTeams);
+                  break;
+          }
+      };
+
+      loadTabData();
+  }, [currentTab, activeUser]);
 
   const checkTutorialStatus = () => {
       const seen = localStorage.getItem('fut_dom_tutorial_seen');
@@ -113,45 +147,33 @@ const App: React.FC = () => {
       setHasUnread(notifs.some(n => !n.read));
   };
 
-  // --- CENTRAL DATA REFRESH ---
-  const refreshData = async () => {
-      // 1. CRITICAL: Fetch User Fresh State if logged in
-      // We rely on localStorage for the ID because 'activeUser' state might be stale inside closures (like setInterval)
-      const storedUserId = localStorage.getItem('fut_dom_user_id');
-      if (storedUserId) {
-          try {
-              const freshUser = await dbService.getUserById(storedUserId);
-              if (freshUser) {
-                  // Update state only if necessary to prevent loops/flickers, 
-                  // but we MUST update if teamId changed (e.g. after creating a team)
-                  setActiveUser(prev => {
-                      if (!prev) return freshUser;
-                      if (prev.teamId !== freshUser.teamId || prev.role !== freshUser.role) {
-                          console.log("♻️ User Sync: Team/Role changed, updating state.");
-                          return freshUser;
-                      }
-                      return prev; 
-                  });
-                  checkNotifications(freshUser.id);
-              }
-          } catch(e) { console.error("User sync failed", e); }
-      }
-
-      // 2. Fetch Global Data
-      const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup, fetchedPosts] = await Promise.all([
+  // --- DATA FETCHING FUNCTIONS ---
+  const initCoreData = async () => {
+      const [fetchedTeams, fetchedTerritories, fetchedCourts] = await Promise.all([
         dbService.getTeams(),
-        dbService.getMatches(),
         dbService.getTerritories(),
         dbService.getCourts(),
-        dbService.getPickupGames(),
-        dbService.getPosts()
       ]);
       setTeams(fetchedTeams);
-      setMatches(fetchedMatches);
       setTerritories(fetchedTerritories);
       setCourts(fetchedCourts);
-      setPickupGames(fetchedPickup);
-      setPosts(fetchedPosts);
+  };
+
+  // Function to force refresh everything (e.g. after a major action)
+  const refreshData = async () => {
+      await initCoreData();
+      
+      // Refresh current tab data
+      if (currentTab === 'feed') setPosts(await dbService.getPosts());
+      if (currentTab === 'calendar' || currentTab === 'profile') setMatches(await dbService.getMatches());
+      if (currentTab === 'pickup' || currentTab === 'calendar') setPickupGames(await dbService.getPickupGames());
+      
+      // Refresh User
+      if (activeUser) {
+          const freshUser = await dbService.getUserById(activeUser.id);
+          if (freshUser) setActiveUser(freshUser);
+          checkNotifications(activeUser.id);
+      }
   };
 
   const handleLogin = (user: User) => {
@@ -321,7 +343,7 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-white uppercase italic tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
-                {currentTab === 'calendar' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Match Center</span>}
+                {currentTab === 'calendar' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Meus Jogos</span>}
                 {currentTab === 'pickup' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500">Pelada Local</span>}
                 {currentTab === 'team' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Meu Elenco</span>}
                 {currentTab === 'market' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">Mercado</span>}
@@ -396,9 +418,9 @@ const App: React.FC = () => {
 
           <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
             {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-            {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
+            {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} pickupGames={pickupGames} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'feed' && <Feed posts={posts} teams={teams} currentUser={activeUser} />}
-            {currentTab === 'team' && <TeamManagement team={myTeam} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
+            {currentTab === 'team' && <TeamManagement team={myTeam} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
             {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
             {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
             {currentTab === 'rank' && <Rankings teams={teams} currentUser={activeUser} />}

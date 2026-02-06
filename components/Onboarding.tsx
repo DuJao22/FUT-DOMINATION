@@ -172,18 +172,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                               <h3 className="text-xl font-bold text-white uppercase">Jogador</h3>
                               <p className="text-xs text-gray-400 mt-1">Entre em elencos, registre suas stats e construa sua carreira.</p>
                           </button>
-
-                          <button 
-                             onClick={() => setSelectedRole(UserRole.FAN)}
-                             className={`p-6 rounded-2xl border text-left transition-all hover:scale-[1.02] ${selectedRole === UserRole.FAN ? 'bg-purple-500/10 border-purple-400 ring-1 ring-purple-400' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-                          >
-                              <div className="flex items-center justify-between mb-2">
-                                  <span className="text-3xl">🎉</span>
-                                  {selectedRole === UserRole.FAN && <div className="w-4 h-4 bg-purple-400 rounded-full shadow-[0_0_10px_#c084fc]"></div>}
-                              </div>
-                              <h3 className="text-xl font-bold text-white uppercase">Torcedor</h3>
-                              <p className="text-xs text-gray-400 mt-1">Siga times locais, veja placares e acompanhe as rivalidades.</p>
-                          </button>
                       </div>
 
                       <button 
@@ -229,7 +217,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                       <label className="block text-gray-400 text-[10px] font-bold uppercase mb-1">CEP (Obrigatório)</label>
                                       <div className="relative">
                                           <input 
-                                              type="text"
+                                              type="text" 
                                               value={cep}
                                               onChange={e => {
                                                   const val = e.target.value.replace(/\D/g, '');
@@ -316,15 +304,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                   />
                               </div>
                           </>
-                      )}
-
-                      {/* --- FAN CONFIRMATION --- */}
-                      {selectedRole === UserRole.FAN && (
-                          <div className="text-center py-8">
-                              <span className="text-6xl mb-4 block">🎉</span>
-                              <h3 className="text-xl font-bold text-white mb-2">Tudo Pronto!</h3>
-                              <p className="text-gray-400">Você está pronto para explorar os campos e torcer.</p>
-                          </div>
                       )}
 
                       <button 

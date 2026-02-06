@@ -1,8 +1,7 @@
 
 export enum UserRole {
   OWNER = 'OWNER',
-  PLAYER = 'PLAYER', // Usually assigned by Owner
-  FAN = 'FAN'        // Free user
+  PLAYER = 'PLAYER'
 }
 
 export interface PlayerStats {

@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Match, Team, User } from '../types';
+import { Match, Team, User, PickupGame } from '../types';
 
 interface MatchCalendarProps {
   matches: Match[];
+  pickupGames?: PickupGame[]; // New prop for pickup games
   teams: Team[];
   currentUser: User;
   onViewPlayer?: (user: User) => void;
 }
 
-export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, currentUser, onViewPlayer }) => {
+export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, pickupGames = [], teams, currentUser, onViewPlayer }) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
-  const [scope, setScope] = useState<'all' | 'mine'>('all');
+  const [gameType, setGameType] = useState<'official' | 'pickup'>('official');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   
   // State for Detail Modal Tabs
@@ -33,34 +34,52 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
       return team?.players || [];
   };
 
-  const relevantMatches = matches.filter(match => {
-      // 1. Filter by Scope (All vs Mine)
-      if (scope === 'mine') {
-          const myTeamId = currentUser.teamId;
-          // Matches where user is player/owner
-          const isMyTeam = myTeamId ? (match.homeTeamId === myTeamId || match.awayTeamId === myTeamId) : false;
-          // Matches user follows
-          const isFollowing = currentUser.following.includes(match.homeTeamId) || (match.awayTeamId && currentUser.following.includes(match.awayTeamId));
-          
-          return isMyTeam || isFollowing;
-      }
-      // 'all' returns everything
-      return true; 
-  });
-
   const now = new Date();
 
-  // Upcoming: Future dates OR status is SCHEDULED
-  const upcomingMatches = relevantMatches
+  // --- FILTERING ---
+
+  // 1. Official Matches (Filtered by User involvement)
+  const myOfficialMatches = matches.filter(match => {
+      const myTeamId = currentUser.teamId;
+      // Matches where user is player/owner
+      const isMyTeam = myTeamId ? (match.homeTeamId === myTeamId || match.awayTeamId === myTeamId) : false;
+      // Matches user follows
+      const isFollowing = currentUser.following.includes(match.homeTeamId) || (match.awayTeamId && currentUser.following.includes(match.awayTeamId));
+      
+      return isMyTeam || isFollowing;
+  });
+
+  // 2. Pickup Games (Filtered by Confirmation)
+  const myPickupGames = pickupGames.filter(game => 
+      game.confirmedPlayers.includes(currentUser.id)
+  );
+
+  // --- SORTING & TAB LOGIC ---
+
+  // Official
+  const upcomingOfficial = myOfficialMatches
       .filter(m => new Date(m.date) >= now || m.status === 'SCHEDULED')
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Past: Past dates AND status is FINISHED
-  const pastMatches = relevantMatches
+  const pastOfficial = myOfficialMatches
       .filter(m => new Date(m.date) < now && m.status !== 'SCHEDULED')
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const displayMatches = activeTab === 'upcoming' ? upcomingMatches : pastMatches;
+  // Pickups
+  const upcomingPickups = myPickupGames
+      .filter(g => new Date(g.date) >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const pastPickups = myPickupGames
+      .filter(g => new Date(g.date) < now)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Determine what to display
+  const displayItems = gameType === 'official' 
+      ? (activeTab === 'upcoming' ? upcomingOfficial : pastOfficial)
+      : (activeTab === 'upcoming' ? upcomingPickups : pastPickups);
+
+  // --- RENDERERS ---
 
   const renderMatchCard = (match: Match) => {
       const dateObj = new Date(match.date);
@@ -78,7 +97,6 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
           const myScore = isHome ? match.homeScore || 0 : match.awayScore || 0;
           const oppScore = isHome ? match.awayScore || 0 : match.homeScore || 0;
           
-          // Only show Win/Loss label if it's explicitly "My Game" context, otherwise just show score for neutrals
           const myTeamId = currentUser.teamId;
           const isParticipant = myTeamId && (match.homeTeamId === myTeamId || match.awayTeamId === myTeamId);
 
@@ -101,14 +119,10 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
 
       return (
           <div key={match.id} className={`relative flex flex-col md:flex-row items-stretch bg-pitch-900 border rounded-2xl overflow-hidden mb-4 transition-all hover:scale-[1.01] ${!isScheduled && activeTab === 'past' && resultLabel ? resultColor : 'border-white/10 hover:border-neon/30'}`}>
-              
-              {/* Date Strip */}
               <div className={`flex flex-row md:flex-col items-center justify-center p-4 min-w-[80px] ${isScheduled || activeTab === 'upcoming' ? 'bg-neon text-pitch-950' : 'bg-black/40 text-gray-400'} font-display font-bold`}>
                   <span className="text-3xl leading-none">{day}</span>
                   <span className="text-sm tracking-widest">{month}</span>
               </div>
-
-              {/* Match Content */}
               <div className="flex-1 p-4 flex flex-col justify-center">
                   <div className="flex justify-between items-center mb-4">
                       <div className="flex items-center gap-2">
@@ -124,27 +138,14 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                               {resultLabel}
                           </span>
                       )}
-                      {match.status === 'SCHEDULED' && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase text-neon bg-neon/10 border border-neon/30">
-                              Agendado
-                          </span>
-                      )}
-                      {match.status === 'PENDING' && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase text-yellow-500 bg-yellow-900/20 border border-yellow-500/30">
-                              Pendente
-                          </span>
-                      )}
+                      {match.status === 'SCHEDULED' && <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase text-neon bg-neon/10 border border-neon/30">Agendado</span>}
+                      {match.status === 'PENDING' && <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase text-yellow-500 bg-yellow-900/20 border border-yellow-500/30">Pendente</span>}
                   </div>
-
-                  {/* Teams & Score */}
                   <div className="flex items-center justify-between">
-                      {/* Home */}
                       <div className="flex flex-col items-center w-1/3">
                           <img src={homeLogo || 'https://via.placeholder.com/50'} className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-black border border-white/10 object-cover mb-2" />
                           <span className="text-xs md:text-sm font-bold text-white text-center leading-tight">{homeName}</span>
                       </div>
-
-                      {/* VS / Score */}
                       <div className="w-1/3 flex flex-col items-center justify-center">
                           {!isScheduled && match.status !== 'PENDING' ? (
                               <div className="flex items-center gap-2 md:gap-4 font-display font-bold text-3xl md:text-5xl text-white">
@@ -159,8 +160,6 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                               </div>
                           )}
                       </div>
-
-                      {/* Away */}
                       <div className="flex flex-col items-center w-1/3">
                           {awayLogo ? (
                              <img src={awayLogo} className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-black border border-white/10 object-cover mb-2" />
@@ -171,15 +170,49 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                       </div>
                   </div>
               </div>
-
-              {/* Action Button */}
               <div className="p-4 flex items-center justify-center border-t md:border-t-0 md:border-l border-white/5 bg-white/5">
-                  <button 
-                      onClick={() => { setSelectedMatch(match); setDetailTab('summary'); }}
-                      className="bg-pitch-950 hover:bg-neon hover:text-pitch-950 text-white border border-white/20 hover:border-neon px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all w-full md:w-auto"
-                  >
-                      Detalhes
-                  </button>
+                  <button onClick={() => { setSelectedMatch(match); setDetailTab('summary'); }} className="bg-pitch-950 hover:bg-neon hover:text-pitch-950 text-white border border-white/20 hover:border-neon px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all w-full md:w-auto">Detalhes</button>
+              </div>
+          </div>
+      );
+  };
+
+  const renderPickupCard = (game: PickupGame) => {
+      const dateObj = new Date(game.date);
+      const day = dateObj.getDate().toString().padStart(2, '0');
+      const month = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '');
+      const time = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const confirmed = game.confirmedPlayers.length;
+
+      return (
+          <div key={game.id} className="relative flex flex-col md:flex-row items-stretch bg-gradient-to-r from-pitch-900 to-black border border-white/10 rounded-2xl overflow-hidden mb-4 transition-all hover:border-blue-500/30">
+              <div className="flex flex-row md:flex-col items-center justify-center p-4 min-w-[80px] bg-blue-600/10 text-blue-400 font-display font-bold border-r border-white/5">
+                  <span className="text-3xl leading-none">{day}</span>
+                  <span className="text-sm tracking-widest">{month}</span>
+              </div>
+              <div className="flex-1 p-4">
+                  <div className="flex justify-between items-start mb-2">
+                      <div>
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase">Pelada</span>
+                              <span className="text-xs text-gray-400 font-bold">{time}</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-white uppercase">{game.title}</h3>
+                      </div>
+                      <div className="text-right">
+                          <span className="block text-2xl font-display font-bold text-white">{confirmed}</span>
+                          <span className="text-[9px] text-gray-500 uppercase">Confirmados</span>
+                      </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>📍</span> {game.locationName}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] border border-black">
+                          👑
+                      </div>
+                      <span className="text-xs text-gray-300">Org. por <b>{game.hostName}</b></span>
+                  </div>
               </div>
           </div>
       );
@@ -193,9 +226,9 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
                     <h2 className="text-4xl font-display font-bold text-white uppercase italic tracking-wide">
-                        Calendário <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Oficial</span>
+                        Minha <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Agenda</span>
                     </h2>
-                    <p className="text-sm text-gray-400">Acompanhe a jornada dos times rumo à glória.</p>
+                    <p className="text-sm text-gray-400">Todos os jogos onde sua presença está confirmada.</p>
                 </div>
 
                 {/* Main Filter (Upcoming vs Results) */}
@@ -210,56 +243,59 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                         onClick={() => setActiveTab('past')}
                         className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${activeTab === 'past' ? 'bg-white text-pitch-950 shadow-lg' : 'text-gray-400 hover:text-white'}`}
                     >
-                        Resultados
+                        Histórico
                     </button>
                 </div>
             </div>
 
-            {/* Scope Filter (All vs Mine) */}
+            {/* Game Type Filter (Official vs Pickups) */}
             <div className="flex gap-2">
                 <button 
-                    onClick={() => setScope('all')}
+                    onClick={() => setGameType('official')}
                     className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase border transition-all ${
-                        scope === 'all' 
-                        ? 'bg-white/10 border-white text-white' 
+                        gameType === 'official' 
+                        ? 'bg-neon/10 border-neon text-neon' 
                         : 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500'
                     }`}
                 >
-                    🌎 Todos os Jogos
+                    🏆 Jogos Oficiais
                 </button>
                 <button 
-                    onClick={() => setScope('mine')}
+                    onClick={() => setGameType('pickup')}
                     className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase border transition-all ${
-                        scope === 'mine' 
+                        gameType === 'pickup' 
                         ? 'bg-blue-500/20 border-blue-400 text-blue-400' 
                         : 'bg-transparent border-gray-700 text-gray-500 hover:border-gray-500'
                     }`}
                 >
-                    👤 Meus Jogos
+                    ⚽ Peladinhas
                 </button>
             </div>
         </div>
 
         {/* Content */}
         <div className="animate-[fadeIn_0.3s_ease-out]">
-            {displayMatches.length === 0 ? (
+            {displayItems.length === 0 ? (
                 <div className="text-center py-16 bg-white/5 rounded-3xl border border-dashed border-white/10">
                     <span className="text-5xl block mb-4 opacity-30">📅</span>
                     <h3 className="text-xl font-bold text-white">Nenhum jogo {activeTab === 'upcoming' ? 'agendado' : 'encontrado'}</h3>
                     <p className="text-sm text-gray-500 mt-2">
-                        {scope === 'mine' 
-                            ? "Você não tem jogos nesta categoria. Mude para 'Todos os Jogos' para explorar." 
-                            : "Nenhuma partida encontrada no sistema."}
+                        {gameType === 'official' 
+                            ? "Você não tem partidas oficiais marcadas com seu time." 
+                            : "Você não confirmou presença em nenhuma pelada."}
                     </p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {displayMatches.map(renderMatchCard)}
+                    {gameType === 'official' 
+                        ? (displayItems as Match[]).map(renderMatchCard)
+                        : (displayItems as PickupGame[]).map(renderPickupCard)
+                    }
                 </div>
             )}
         </div>
 
-        {/* --- DETAILS MODAL --- */}
+        {/* --- DETAILS MODAL (ONLY FOR OFFICIAL MATCHES) --- */}
         {selectedMatch && (
             <div className="fixed inset-0 bg-black/95 z-[2000] flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
                  <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative max-h-[90vh] flex flex-col">
@@ -328,7 +364,6 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
 
                         {detailTab === 'summary' && (
                             <div className="animate-fadeIn">
-                                {/* Location Link */}
                                 <a 
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedMatch.locationName)}`}
                                 target="_blank"
@@ -345,7 +380,6 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                                     <svg className="w-5 h-5 text-gray-500 group-hover:text-neon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                 </a>
 
-                                {/* Goals List (if any) */}
                                 {selectedMatch.goals && selectedMatch.goals.length > 0 && (
                                     <div className="bg-black/30 rounded-xl p-4 border border-white/5">
                                         <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b border-white/5 pb-2">Gols da Partida</h4>
@@ -369,14 +403,13 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
 
                         {detailTab === 'lineups' && (
                             <div className="animate-fadeIn grid grid-cols-2 gap-4">
-                                {/* Home Team Roster */}
                                 <div>
                                     <h4 className="text-[10px] text-neon uppercase font-bold mb-3 border-b border-neon/20 pb-1 text-center">Mandante</h4>
                                     <div className="space-y-2">
                                         {getTeamPlayers(selectedMatch.homeTeamId).map(p => (
                                             <div 
                                                 key={p.id} 
-                                                onClick={() => onViewPlayer && onViewPlayer(p)} // CLICK HANDLER ADDED
+                                                onClick={() => onViewPlayer && onViewPlayer(p)} 
                                                 className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                                             >
                                                 <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />
@@ -390,14 +423,13 @@ export const MatchCalendar: React.FC<MatchCalendarProps> = ({ matches, teams, cu
                                     </div>
                                 </div>
 
-                                {/* Away Team Roster */}
                                 <div>
                                     <h4 className="text-[10px] text-white uppercase font-bold mb-3 border-b border-white/20 pb-1 text-center">Visitante</h4>
                                     <div className="space-y-2">
                                         {getTeamPlayers(selectedMatch.awayTeamId).map(p => (
                                             <div 
                                                 key={p.id} 
-                                                onClick={() => onViewPlayer && onViewPlayer(p)} // CLICK HANDLER ADDED
+                                                onClick={() => onViewPlayer && onViewPlayer(p)} 
                                                 className="flex items-center gap-2 bg-white/5 p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                                             >
                                                 <img src={p.avatarUrl} className="w-6 h-6 rounded-full bg-black object-cover" />

@@ -55,7 +55,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
       if (res.success) {
           alert("Você saiu do time.");
           if (onUpdateUser) {
-              onUpdateUser({ ...user, teamId: undefined, role: UserRole.FAN });
+              onUpdateUser({ ...user, teamId: undefined, role: UserRole.PLAYER });
           }
       } else {
           alert("Erro ao sair do time.");
@@ -164,7 +164,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
                      <div className="text-right">
                          <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Flag_of_Brazil.svg" className="w-10 h-7 rounded shadow-md inline-block mb-1 border border-white/10" />
                          <p className="text-xs font-bold text-pitch-400 tracking-wide uppercase">
-                             {user.role === UserRole.OWNER ? 'DONO/CAPITÃO' : 'TORCEDOR LIVRE'}
+                             {user.role === UserRole.OWNER ? 'DONO/CAPITÃO' : 'JOGADOR LIVRE'}
                          </p>
                      </div>
                  </div>

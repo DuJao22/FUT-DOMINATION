@@ -30,7 +30,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 id: `u-${Date.now()}`,
                 name: cleanName,
                 email: cleanEmail,
-                role: UserRole.FAN,
+                role: UserRole.PLAYER, // Default role until Onboarding
                 teamId: undefined,
                 avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=random`,
                 bio: 'Novo usuário no Fut-Domination.',

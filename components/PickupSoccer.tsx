@@ -120,6 +120,20 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
         setViewingAttendees(users);
     };
 
+    const handleDeleteGame = async (gameId: string) => {
+        if (!window.confirm("Tem certeza que deseja cancelar esta pelada? A ação não pode ser desfeita.")) {
+            return;
+        }
+        
+        const success = await dbService.deletePickupGame(gameId);
+        if (success) {
+            alert("Pelada cancelada com sucesso.");
+            loadData();
+        } else {
+            alert("Erro ao excluir. Tente novamente.");
+        }
+    };
+
     const handleCreateGame = async () => {
         if (!newGameLocation || !gameTitle || !gameDate) return;
         
@@ -284,6 +298,8 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                 const percent = (game.confirmedPlayers.length / game.maxPlayers) * 100;
                                 const dateObj = new Date(game.date);
                                 const hasPlayers = game.confirmedPlayers.length > 0;
+                                const isHost = game.hostId === currentUser.id;
+                                const isFuture = new Date() < dateObj;
                                 
                                 return (
                                     <div key={game.id} className="relative group overflow-hidden bg-pitch-950 border border-white/10 rounded-[2rem] hover:border-neon/40 transition-all duration-300 shadow-2xl hover:shadow-[0_0_30px_rgba(57,255,20,0.1)]">
@@ -311,7 +327,7 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                                     </button>
                                                 </div>
 
-                                                {/* Date Ticket */}
+                                                {/* Date Ticket or Status */}
                                                 <div className="flex flex-col items-center justify-center bg-black/50 backdrop-blur-md border border-white/10 rounded-xl p-2 min-w-[70px]">
                                                     <span className="text-neon font-display font-bold text-2xl leading-none">{dateObj.getDate()}</span>
                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{dateObj.toLocaleDateString('pt-BR', {month: 'short'}).replace('.','')}</span>
@@ -321,10 +337,21 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                             </div>
 
                                             {/* Description */}
-                                            <div className="mb-6">
+                                            <div className="mb-6 relative">
                                                 <p className="text-xs text-gray-400 leading-relaxed line-clamp-2 italic">
                                                     "{game.description || "Resenha garantida. Traga sua chuteira e colete se tiver."}"
                                                 </p>
+                                                
+                                                {/* Delete Button (Host Only & Future Only) */}
+                                                {isHost && isFuture && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteGame(game.id); }}
+                                                        className="absolute right-0 top-0 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-2 rounded-lg transition-colors shadow-lg"
+                                                        title="Cancelar Pelada"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                )}
                                             </div>
 
                                             {/* Host & Progress Section */}
@@ -369,25 +396,31 @@ export const PickupSoccer: React.FC<PickupSoccerProps> = ({ currentUser, onViewP
                                             </div>
 
                                             {/* Action Button */}
-                                            <button 
-                                                onClick={() => handleJoin(game)}
-                                                className={`w-full py-4 rounded-xl font-display font-bold text-xl uppercase tracking-widest transition-all transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${
-                                                    isJoined 
-                                                    ? 'bg-red-900/20 text-red-500 border border-red-500/30 hover:bg-red-900/40' 
-                                                    : slotsLeft === 0 
-                                                        ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5'
-                                                        : 'bg-neon text-pitch-950 hover:bg-white hover:scale-[1.01] shadow-neon/40'
-                                                }`}
-                                                disabled={!isJoined && slotsLeft === 0}
-                                            >
-                                                {isJoined ? (
-                                                    <><span>✕</span> Cancelar Presença</>
-                                                ) : slotsLeft === 0 ? (
-                                                    <><span>🔒</span> Lista de Espera</>
-                                                ) : (
-                                                    <><span>⚡</span> Confirmar Presença</>
-                                                )}
-                                            </button>
+                                            {isFuture ? (
+                                                <button 
+                                                    onClick={() => handleJoin(game)}
+                                                    className={`w-full py-4 rounded-xl font-display font-bold text-xl uppercase tracking-widest transition-all transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${
+                                                        isJoined 
+                                                        ? 'bg-red-900/20 text-red-500 border border-red-500/30 hover:bg-red-900/40' 
+                                                        : slotsLeft === 0 
+                                                            ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5'
+                                                            : 'bg-neon text-pitch-950 hover:bg-white hover:scale-[1.01] shadow-neon/40'
+                                                    }`}
+                                                    disabled={!isJoined && slotsLeft === 0}
+                                                >
+                                                    {isJoined ? (
+                                                        <><span>✕</span> Cancelar Presença</>
+                                                    ) : slotsLeft === 0 ? (
+                                                        <><span>🔒</span> Lista de Espera</>
+                                                    ) : (
+                                                        <><span>⚡</span> Confirmar Presença</>
+                                                    )}
+                                                </button>
+                                            ) : (
+                                                <div className="w-full py-4 rounded-xl font-display font-bold text-xl uppercase tracking-widest bg-white/5 text-gray-500 border border-white/5 text-center flex items-center justify-center gap-2">
+                                                    <span>🏁</span> Jogo Finalizado
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
