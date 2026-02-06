@@ -60,6 +60,7 @@ const App: React.FC = () => {
             const storedUserId = localStorage.getItem('fut_dom_user_id');
             if (storedUserId) {
                 console.log("🔄 Restoring session for:", storedUserId);
+                // We use the ID from localStorage to fetch, ensuring fresh data on reload
                 const user = await dbService.getUserById(storedUserId);
                 if (user) {
                     setActiveUser(user);
@@ -111,7 +112,31 @@ const App: React.FC = () => {
       setHasUnread(notifs.some(n => !n.read));
   };
 
+  // --- CENTRAL DATA REFRESH ---
   const refreshData = async () => {
+      // 1. CRITICAL: Fetch User Fresh State if logged in
+      // We rely on localStorage for the ID because 'activeUser' state might be stale inside closures (like setInterval)
+      const storedUserId = localStorage.getItem('fut_dom_user_id');
+      if (storedUserId) {
+          try {
+              const freshUser = await dbService.getUserById(storedUserId);
+              if (freshUser) {
+                  // Update state only if necessary to prevent loops/flickers, 
+                  // but we MUST update if teamId changed (e.g. after creating a team)
+                  setActiveUser(prev => {
+                      if (!prev) return freshUser;
+                      if (prev.teamId !== freshUser.teamId || prev.role !== freshUser.role) {
+                          console.log("♻️ User Sync: Team/Role changed, updating state.");
+                          return freshUser;
+                      }
+                      return prev; 
+                  });
+                  checkNotifications(freshUser.id);
+              }
+          } catch(e) { console.error("User sync failed", e); }
+      }
+
+      // 2. Fetch Global Data
       const [fetchedTeams, fetchedMatches, fetchedTerritories, fetchedCourts, fetchedPickup] = await Promise.all([
         dbService.getTeams(),
         dbService.getMatches(),
@@ -124,12 +149,6 @@ const App: React.FC = () => {
       setTerritories(fetchedTerritories);
       setCourts(fetchedCourts);
       setPickupGames(fetchedPickup);
-      
-      // Also update notification status silently
-      if(activeUser) {
-          // Note: we don't update activeUser full object here to avoid UI flickering, just notifications
-          checkNotifications(activeUser.id);
-      }
   };
 
   const handleLogin = (user: User) => {
