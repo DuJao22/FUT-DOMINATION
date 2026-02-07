@@ -98,14 +98,14 @@ const App: React.FC = () => {
       const loadTabData = async () => {
           if (!activeUser) return;
 
-          // Only fetch heavy data if the tab is active
+          // Always fetch fresh data when switching tabs to ensure "Live" feel
           switch (currentTab) {
               case 'feed':
-                  if(posts.length === 0) setPosts(await dbService.getPosts());
+                  setPosts(await dbService.getPosts());
                   break;
               case 'calendar':
               case 'profile':
-                  const fMatches = await dbService.getMatches(); // Always refresh matches to see latest results
+                  const fMatches = await dbService.getMatches(); 
                   const fPickupsCal = await dbService.getPickupGames();
                   setMatches(fMatches);
                   setPickupGames(fPickupsCal);
@@ -127,7 +127,8 @@ const App: React.FC = () => {
                   break;
               case 'team':
               case 'market':
-                  // Teams are core, but ensure fresh
+              case 'rank':
+                  // Teams are core, but ensure fresh for rankings/market
                   const tTeams = await dbService.getTeams();
                   setTeams(tTeams);
                   break;
@@ -170,7 +171,7 @@ const App: React.FC = () => {
   const refreshData = async () => {
       await initCoreData();
       
-      // Refresh current tab data
+      // Refresh current tab data regardless of which one it is
       if (currentTab === 'feed') setPosts(await dbService.getPosts());
       if (currentTab === 'calendar' || currentTab === 'profile') setMatches(await dbService.getMatches());
       if (currentTab === 'pickup' || currentTab === 'calendar') setPickupGames(await dbService.getPickupGames());

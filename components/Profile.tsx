@@ -49,6 +49,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
 
   const handleLeaveTeam = async () => {
       if (!user.teamId) return;
+      // Safety check just in case
+      if (user.role === UserRole.OWNER) {
+          alert("Donos de time não podem sair. Você deve transferir a posse ou excluir o time.");
+          return;
+      }
+      
       if (!window.confirm("Tem certeza que deseja sair do seu time atual? Você virará um agente livre.")) return;
 
       const res = await dbService.removePlayerFromTeam(user.id);
@@ -79,7 +85,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
               className="bg-pitch-900/80 backdrop-blur p-2 rounded-full border border-white/10 hover:border-red-500 text-gray-400 hover:text-red-500 transition-colors"
               title="Sair da Conta"
            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 01-3-3h4a3 3 0 013 3v1" /></svg>
            </button>
       </div>
 
@@ -180,11 +186,19 @@ export const Profile: React.FC<ProfileProps> = ({ user, matches, onUpdateUser, o
                  <p className="text-center text-gray-400 text-xs uppercase tracking-widest mb-4 relative z-10">{user.bio || "Sem biografia..."}</p>
                  
                  {user.teamId ? (
-                     <div className="text-center mb-4">
-                         <button onClick={handleLeaveTeam} className="text-[10px] text-red-500 hover:text-white uppercase font-bold border border-red-500/30 px-3 py-1 rounded hover:bg-red-900 transition-colors">
-                             Pedir Demissão (Sair do Time)
-                         </button>
-                     </div>
+                     user.role === UserRole.OWNER ? (
+                        <div className="text-center mb-4">
+                             <span className="text-[10px] text-gold bg-gold/10 border border-gold/30 px-3 py-1 rounded uppercase font-bold tracking-widest">
+                                 Dono do Clube
+                             </span>
+                        </div>
+                     ) : (
+                        <div className="text-center mb-4">
+                             <button onClick={handleLeaveTeam} className="text-[10px] text-red-500 hover:text-white uppercase font-bold border border-red-500/30 px-3 py-1 rounded hover:bg-red-900 transition-colors">
+                                 Pedir Demissão (Sair do Time)
+                             </button>
+                        </div>
+                     )
                  ) : (
                      <div className="text-center mb-4">
                          <span className="text-[10px] text-neon uppercase font-bold border border-neon/30 px-3 py-1 rounded">
