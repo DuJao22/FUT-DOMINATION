@@ -43,11 +43,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
       </nav>
 
       {/* --- HERO SECTION --- */}
-      <section className="relative pt-44 pb-20 md:pt-60 md:pb-32 px-6 overflow-hidden">
-        {/* Dynamic Background */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-neon/20 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse-slow"></div>
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 pointer-events-none"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pitch-950/80 to-pitch-950 pointer-events-none"></div>
+      <section className="relative pt-44 pb-20 md:pt-60 md:pb-32 px-6 overflow-hidden min-h-[90vh] flex flex-col justify-center">
+        
+        {/* NEW BACKGROUND IMAGE */}
+        <div className="absolute inset-0 z-0">
+            {/* Soccer Ball Image */}
+            <img 
+                src="https://images.unsplash.com/photo-1518091043644-c1d4457512c6?q=80&w=2560&auto=format&fit=crop" 
+                alt="Soccer Ball Night" 
+                className="w-full h-full object-cover object-center opacity-50 select-none"
+            />
+            {/* Dark Gradient Overlay (Top to Bottom) for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-pitch-950/90 via-pitch-950/60 to-pitch-950"></div>
+            {/* Texture Overlay */}
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div>
+        </div>
+
+        {/* Dynamic Glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-neon/20 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse-slow z-0"></div>
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
           
@@ -64,7 +77,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon via-white to-neon animate-shimmer bg-[length:200%_auto]">Profissional</span>
           </h1>
           
-          <p className="text-sm md:text-lg text-gray-400 max-w-2xl mx-auto mb-12 leading-relaxed font-light animate-[slideUp_0.9s_ease-out] border-l-2 border-neon/50 pl-6 text-left md:text-center md:border-none md:pl-0">
+          <p className="text-sm md:text-lg text-gray-300 max-w-2xl mx-auto mb-12 leading-relaxed font-light animate-[slideUp_0.9s_ease-out] border-l-2 border-neon/50 pl-6 text-left md:text-center md:border-none md:pl-0 drop-shadow-md">
             FUT-DOMINATION transforma o futebol de fim de semana em um jogo de estratégia real. 
             <span className="text-white font-bold"> Conquiste bairros, gerencie sua equipe e suba no ranking global.</span>
           </p>
@@ -79,7 +92,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             </button>
             <button 
                 onClick={() => document.getElementById('roles')?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-gray-400 hover:text-white font-bold text-xs px-8 py-5 rounded-xl border border-white/10 hover:bg-white/5 transition-all uppercase tracking-widest hover:border-white/30"
+                className="text-gray-300 hover:text-white font-bold text-xs px-8 py-5 rounded-xl border border-white/10 hover:bg-white/5 transition-all uppercase tracking-widest hover:border-white/30 backdrop-blur-sm"
             >
                 Como Funciona
             </button>
