@@ -5,10 +5,11 @@ interface NavigationProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   userRole: UserRole;
+  hasTeam: boolean; // NEW PROP
   onLogout: () => void;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTab, userRole, onLogout }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTab, userRole, hasTeam, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -27,9 +28,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
     { id: 'team', label: 'Meu Time', icon: (active: boolean) => (
       <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
     )},
-    { id: 'feed', label: 'Clube', icon: (active: boolean) => (
-      <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
-    )},
     { id: 'rank', label: 'Rankings', icon: (active: boolean) => (
        <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M16 11V3H8v6H2v12h20V11h-6zm-6-6h4v14h-4V5zm-6 6h4v8H4v-8zm16 8h-4v-6h4v6z"/></svg>
     )},
@@ -37,6 +35,15 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
        <svg className={`w-6 h-6 transition-colors duration-300 ${active ? 'fill-neon drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]' : 'fill-gray-400 group-hover:fill-gray-200'}`} viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
     )},
   ];
+
+  // Logic to hide 'team' tab if player has no team
+  const visibleNavItems = navItems.filter(item => {
+      if (item.id === 'team') {
+          // Show if User is Owner OR User has a valid team
+          return userRole === UserRole.OWNER || hasTeam;
+      }
+      return true;
+  });
 
   const MenuContent = () => (
       <div className="flex flex-col h-full">
@@ -48,7 +55,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, setCurrentTa
         </div>
         
         <div className="flex flex-col gap-2 flex-1 overflow-y-auto no-scrollbar">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.id}
               onClick={() => {

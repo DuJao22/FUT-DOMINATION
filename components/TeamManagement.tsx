@@ -1,26 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Team, User, UserRole, Post } from '../types';
+import { Team, User, UserRole } from '../types';
 import { dbService } from '../services/database';
 
 interface TeamManagementProps {
   team: Team;
-  teams: Team[]; // Add full list of teams to suggest
-  currentUser: User; // We need the whole user object now for following logic
+  teams: Team[]; 
+  currentUser: User; 
   onViewPlayer?: (user: User) => void;
-  onRefreshData?: () => void; // New Prop for syncing
+  onRefreshData?: () => void; 
 }
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, currentUser, onViewPlayer, onRefreshData }) => {
   const [localTeam, setLocalTeam] = useState<Team>(team);
-  const [activeTab, setActiveTab] = useState<'posts' | 'squad' | 'schedule'>('squad');
+  const [activeTab, setActiveTab] = useState<'squad' | 'schedule'>('squad');
   
-  // Stats State
-  const [followers, setFollowers] = useState<User[]>([]);
-  const [showFollowersModal, setShowFollowersModal] = useState(false);
-
-  // Posts State
-  const [teamPosts, setTeamPosts] = useState<Post[]>([]);
-  const [viewingPost, setViewingPost] = useState<Post | null>(null);
+  // Follow State
+  const [isFollowing, setIsFollowing] = useState(currentUser.following.includes(team.id));
 
   // Edit Profile State
   const [isEditing, setIsEditing] = useState(false);
@@ -31,49 +26,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  // Post Creation State
-  const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [postType, setPostType] = useState<'match' | 'news'>('news');
-  const [postForm, setPostForm] = useState({
-      content: '',
-      opponent: '',
-      myScore: '',
-      oppScore: '',
-      location: '',
-      imageUrl: '' // New Image Field
-  });
-
-  // Follow State
-  const [isFollowing, setIsFollowing] = useState(currentUser.following.includes(team.id));
-
-  // ROBUST OWNER CHECK: If current user ID matches team owner ID, they are the owner.
+  // ROBUST OWNER CHECK
   const isOwner = currentUser.id === team.ownerId;
 
   // Check if User is a Fan/Player WITHOUT a team (showing the fallback 'temp_team')
   const hasNoTeam = !isOwner && (team.id === 'temp_team' || !currentUser.teamId);
 
   // IMPORTANT: Only update local state if NOT editing.
-  // This prevents the "name reverting" bug when background refresh polling happens.
   useEffect(() => {
       if (!isEditing) {
           setLocalTeam(team);
           setEditForm({ name: team.name, bio: team.bio || '', logoUrl: team.logoUrl });
           setIsFollowing(currentUser.following.includes(team.id));
       }
-      
-      // Fetch Followers & Posts only if it's a real team
-      if (team.id !== 'temp_team') {
-          dbService.getTeamFollowers(team.id).then(users => setFollowers(users));
-          fetchTeamPosts();
-      }
   }, [team, currentUser, isEditing]);
-
-  const fetchTeamPosts = async () => {
-      const allPosts = await dbService.getPosts();
-      // Filter posts belonging to this team
-      const myPosts = allPosts.filter(p => p.teamId === team.id).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-      setTeamPosts(myPosts);
-  };
 
   // --- HANDLERS ---
 
@@ -82,19 +48,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
       try {
           let targetId = localTeam.id;
           
-          // CRITICAL FIX: If the team ID is 'temp_team' (fallback from App.tsx), it means the user's team
-          // was deleted or doesn't exist. We must generate a NEW ID and INSERT it.
-          // Or if targetId is null/undefined.
           if (targetId === 'temp_team' || !targetId || targetId.startsWith('temp')) {
               targetId = `t-${Date.now()}`;
-              // Update user to point to this new team ID so they don't lose access
               await dbService.executeQuery(`UPDATE users SET team_id = '${targetId}' WHERE id = '${currentUser.id}'`);
           }
 
-          // Use the robust save method (Upsert logic)
           await dbService.saveTeamProfile(targetId, currentUser.id, editForm.name, editForm.logoUrl, editForm.bio);
           
-          // Optimistic update to UI so it feels instant
           const updatedTeam = { 
               ...localTeam, 
               id: targetId,
@@ -104,7 +64,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
           };
           setLocalTeam(updatedTeam);
           
-          // Force refresh immediately
           if (onRefreshData) {
               onRefreshData();
           }
@@ -123,68 +82,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
           const success = await dbService.unfollowTeam(currentUser.id, team.id);
           if (success) {
               setIsFollowing(false);
-              setFollowers(prev => prev.filter(u => u.id !== currentUser.id));
           }
       } else {
           const success = await dbService.followTeam(currentUser.id, team.id);
           if (success) {
               setIsFollowing(true);
-              setFollowers(prev => [...prev, currentUser]);
           }
-      }
-  };
-
-  const handleCreatePost = async () => {
-      // Validation
-      if (!postForm.content && !postForm.imageUrl) return; 
-      
-      // Safety check for unsaved teams
-      if (localTeam.id === 'temp_team' || localTeam.id.startsWith('temp')) {
-          alert("Por favor, edite e SALVE o perfil do time antes de publicar.");
-          setIsEditing(true);
-          setIsCreatingPost(false);
-          return;
-      }
-
-      setIsSaving(true);
-
-      try {
-          const newPost: Post = {
-              id: `p-${Date.now()}`,
-              authorId: currentUser.id,
-              authorName: localTeam.name, // Post as Team Name
-              authorRole: UserRole.OWNER,
-              content: postForm.content,
-              imageUrl: postForm.imageUrl, 
-              likes: 0,
-              timestamp: new Date(),
-              teamId: localTeam.id,
-              comments: [],
-              matchContext: postType === 'match' && (postForm.opponent || postForm.myScore) ? {
-                  opponentName: postForm.opponent || 'Adversário',
-                  result: `${postForm.myScore || 0} - ${postForm.oppScore || 0}`,
-                  location: postForm.location
-              } : undefined
-          };
-
-          const success = await dbService.createPost(newPost);
-          if (success) {
-              alert("Post publicado!");
-              setIsCreatingPost(false);
-              setPostForm({ content: '', opponent: '', myScore: '', oppScore: '', location: '', imageUrl: '' });
-              
-              // Refresh local list immediately
-              fetchTeamPosts();
-              
-              if (onRefreshData) onRefreshData(); // Refresh global feed
-          } else {
-              alert("Erro ao publicar. Verifique sua conexão.");
-          }
-      } catch (e) {
-          console.error(e);
-          alert("Erro técnico ao publicar.");
-      } finally {
-          setIsSaving(false);
       }
   };
 
@@ -278,138 +181,61 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
   return (
     <div className="pb-24 max-w-4xl mx-auto">
       
-      {/* --- INSTAGRAM HEADER --- */}
-      <div className="bg-black/40 backdrop-blur-md rounded-b-3xl border-b border-white/5 p-6 mb-6">
-          <div className="flex items-center gap-6">
-              
+      {/* --- INFO HEADER (Not Instagram Style) --- */}
+      <div className="bg-gradient-to-r from-pitch-900 to-black rounded-b-3xl border-b border-white/5 p-6 mb-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-neon/5 rounded-full blur-[80px] pointer-events-none"></div>
+          
+          <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
               {/* Profile Pic */}
-              <div className="relative">
-                  <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-neon via-white to-black">
-                      <img src={localTeam.logoUrl} className="w-full h-full rounded-full object-cover border-2 border-black" />
+              <div className="relative group">
+                  <div className="w-28 h-28 rounded-full p-1 bg-gradient-to-br from-neon via-white to-black shadow-lg">
+                      <img src={localTeam.logoUrl} className="w-full h-full rounded-full object-cover border-4 border-pitch-950" />
                   </div>
                   {/* Category Badge */}
-                  <div className="absolute -bottom-2 -right-2 bg-pitch-900 border border-white/10 px-2 py-0.5 rounded-lg text-[10px] font-bold text-gray-300 uppercase">
+                  <div className="absolute -bottom-2 -right-2 bg-pitch-950 border border-white/20 px-3 py-1 rounded-full text-[10px] font-bold text-gray-300 uppercase shadow-lg">
                       {localTeam.category}
                   </div>
               </div>
 
-              {/* Stats & Actions */}
-              <div className="flex-1">
-                  <div className="flex justify-around text-center mb-4">
-                      <div>
-                          <span className="block font-bold text-white text-lg">{teamPosts.length}</span>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Posts</span>
-                      </div>
-                      <div>
-                          <span className="block font-bold text-white text-lg">{localTeam.wins}</span>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Vitórias</span>
-                      </div>
-                      {/* Clickable Followers Count */}
-                      <div onClick={() => setShowFollowersModal(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
-                          <span className="block font-bold text-white text-lg">{followers.length}</span>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Seguidores</span>
-                      </div>
+              {/* Text Info */}
+              <div className="flex-1 text-center md:text-left">
+                  <h1 className="text-white font-display font-bold text-3xl md:text-4xl tracking-wide uppercase leading-none mb-2">
+                      {localTeam.name}
+                  </h1>
+                  
+                  <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-4 text-sm">
+                      <span className="text-gray-400 flex items-center gap-1">
+                          📍 {localTeam.homeTurf || "Sem Base"}
+                      </span>
+                      <span className="text-gray-400 flex items-center gap-1">
+                          🏆 {localTeam.wins} Vitórias
+                      </span>
                   </div>
 
-                  {isOwner ? (
-                      <div className="flex gap-2">
-                          <button onClick={() => setIsEditing(true)} className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold text-xs py-2 rounded-lg transition-colors">
-                              Editar Perfil
-                          </button>
-                          <button onClick={() => setIsCreatingPost(true)} className="flex-1 bg-neon text-black font-bold text-xs py-2 rounded-lg transition-colors shadow-neon/20">
-                              + Publicar
-                          </button>
-                      </div>
-                  ) : (
-                      <button 
-                        onClick={handleToggleFollow}
-                        className={`w-full font-bold text-xs py-2 rounded-lg transition-all ${isFollowing ? 'bg-white/10 text-white border border-white/20' : 'bg-blue-600 text-white shadow-lg'}`}
-                      >
-                          {isFollowing ? 'Seguindo' : 'Seguir'}
-                      </button>
+                  {localTeam.bio && (
+                      <p className="text-gray-500 text-xs max-w-lg leading-relaxed mb-4 mx-auto md:mx-0">
+                          {localTeam.bio}
+                      </p>
                   )}
-              </div>
-          </div>
 
-          {/* Bio Section */}
-          <div className="mt-4">
-              <h1 className="text-white font-display font-bold text-xl tracking-wide">{localTeam.name}</h1>
-              <p className="text-gray-400 text-sm mt-1 whitespace-pre-wrap leading-relaxed">{localTeam.bio || "Sem biografia..."}</p>
-              <p className="text-neon text-xs mt-2 font-bold uppercase tracking-widest flex items-center gap-1">
-                  📍 {localTeam.homeTurf || "Sem Base"}
-              </p>
+                  {/* Actions */}
+                  <div className="flex justify-center md:justify-start gap-3">
+                      {isOwner ? (
+                          <button onClick={() => setIsEditing(true)} className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-6 py-2 rounded-lg transition-colors border border-white/10">
+                              Editar Clube
+                          </button>
+                      ) : (
+                          <button 
+                            onClick={handleToggleFollow}
+                            className={`font-bold text-xs px-6 py-2 rounded-lg transition-all ${isFollowing ? 'bg-white/10 text-white border border-white/20' : 'bg-neon text-black shadow-lg'}`}
+                          >
+                              {isFollowing ? 'Seguindo' : 'Seguir Clube'}
+                          </button>
+                      )}
+                  </div>
+              </div>
           </div>
       </div>
-
-      {/* --- FOLLOWERS LIST MODAL --- */}
-      {showFollowersModal && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowFollowersModal(false)}>
-              <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                  <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/50 rounded-t-2xl">
-                      <h3 className="font-bold text-white text-lg">Seguidores ({followers.length})</h3>
-                      <button onClick={() => setShowFollowersModal(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
-                  </div>
-                  <div className="overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                      {followers.length === 0 ? (
-                          <p className="text-center text-gray-500 py-4">Nenhum seguidor ainda.</p>
-                      ) : (
-                          followers.map(follower => (
-                              <div key={follower.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5">
-                                  <img src={follower.avatarUrl} className="w-10 h-10 rounded-full object-cover bg-gray-800" />
-                                  <div className="flex-1">
-                                      <p className="text-white font-bold text-sm">{follower.name}</p>
-                                      <p className="text-[10px] text-gray-400 uppercase">{follower.role === UserRole.OWNER ? 'Dono de Time' : follower.role === UserRole.PLAYER ? 'Jogador' : 'Torcedor'}</p>
-                                  </div>
-                              </div>
-                          ))
-                      )}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* --- VIEW POST MODAL --- */}
-      {viewingPost && (
-          <div className="fixed inset-0 bg-black/95 z-[2000] flex items-center justify-center p-4 animate-fadeIn" onClick={() => setViewingPost(null)}>
-              <div className="w-full max-w-md bg-pitch-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
-                  <div className="relative">
-                      {viewingPost.imageUrl ? (
-                          <img src={viewingPost.imageUrl} className="w-full max-h-[50vh] object-cover" />
-                      ) : (
-                          <div className="h-48 bg-gradient-to-br from-pitch-800 to-black flex items-center justify-center p-6 text-center">
-                              <p className="font-display font-bold text-2xl text-white italic">"{viewingPost.content}"</p>
-                          </div>
-                      )}
-                      <button onClick={() => setViewingPost(null)} className="absolute top-4 right-4 bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-black">✕</button>
-                  </div>
-                  <div className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                          <h4 className="font-bold text-white">{viewingPost.authorName}</h4>
-                          <span className="text-xs text-gray-500">{new Date(viewingPost.timestamp).toLocaleDateString()}</span>
-                      </div>
-                      
-                      {viewingPost.imageUrl && (
-                          <p className="text-gray-300 text-sm mb-4">{viewingPost.content}</p>
-                      )}
-
-                      {viewingPost.matchContext && (
-                          <div className="bg-white/5 p-3 rounded-xl border border-white/5 mb-4">
-                              <div className="flex justify-between items-center">
-                                  <span className="text-xs font-bold text-gray-400 uppercase">Resultado</span>
-                                  <span className="font-display font-bold text-lg text-white">{viewingPost.matchContext.result}</span>
-                              </div>
-                              <p className="text-xs text-gray-500">vs {viewingPost.matchContext.opponentName}</p>
-                          </div>
-                      )}
-
-                      <div className="flex gap-4 text-gray-400 text-sm border-t border-white/5 pt-4">
-                          <span className="flex items-center gap-1">❤️ {viewingPost.likes}</span>
-                          <span className="flex items-center gap-1">💬 {viewingPost.comments.length}</span>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
 
       {/* --- EDIT MODAL (OWNER) --- */}
       {isEditing && (
@@ -455,73 +281,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
           </div>
       )}
 
-      {/* --- CREATE POST MODAL (OWNER) --- */}
-      {isCreatingPost && (
-          <div className="fixed inset-0 bg-black/80 z-[2000] flex items-center justify-center p-4">
-              <div className="bg-pitch-950 border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-[slideUp_0.2s]">
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold text-white">Novo Post</h3>
-                      <div className="flex bg-black rounded-lg p-1 border border-white/10">
-                          <button onClick={() => setPostType('news')} className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${postType === 'news' ? 'bg-white text-black' : 'text-gray-500'}`}>Aviso</button>
-                          <button onClick={() => setPostType('match')} className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${postType === 'match' ? 'bg-neon text-black' : 'text-gray-500'}`}>Placar</button>
-                      </div>
-                  </div>
-
-                  <div className="space-y-4">
-                      <textarea 
-                          value={postForm.content}
-                          onChange={e => setPostForm({...postForm, content: e.target.value})}
-                          className="w-full bg-black border border-white/10 rounded-xl p-4 text-white placeholder-gray-600 focus:outline-none h-20 resize-none"
-                          placeholder={postType === 'match' ? "Comentário sobre o jogo..." : "O que está acontecendo no clube?"}
-                      />
-
-                      {/* Image Input */}
-                      <div>
-                          <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Foto / Vídeo (URL)</label>
-                          <input 
-                              type="text" 
-                              value={postForm.imageUrl}
-                              onChange={e => setPostForm({...postForm, imageUrl: e.target.value})}
-                              className="w-full bg-black border border-white/10 rounded-lg p-2 text-white text-xs placeholder-gray-700 focus:border-neon focus:outline-none"
-                              placeholder="https://..."
-                          />
-                      </div>
-
-                      {postType === 'match' && (
-                          <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
-                              <input 
-                                  type="text"
-                                  placeholder="Nome do Adversário"
-                                  className="w-full bg-black border border-white/10 rounded-lg p-2 text-white text-xs"
-                                  value={postForm.opponent}
-                                  onChange={e => setPostForm({...postForm, opponent: e.target.value})}
-                              />
-                              <div className="flex items-center gap-2">
-                                  <input type="number" placeholder="Nós" className="w-12 bg-black border border-white/10 rounded-lg p-2 text-center text-white font-bold" value={postForm.myScore} onChange={e => setPostForm({...postForm, myScore: e.target.value})}/>
-                                  <span className="text-gray-500">-</span>
-                                  <input type="number" placeholder="Eles" className="w-12 bg-black border border-white/10 rounded-lg p-2 text-center text-white font-bold" value={postForm.oppScore} onChange={e => setPostForm({...postForm, oppScore: e.target.value})}/>
-                              </div>
-                              <input 
-                                  type="text"
-                                  placeholder="Local do Jogo (Opcional)"
-                                  className="w-full bg-black border border-white/10 rounded-lg p-2 text-white text-xs"
-                                  value={postForm.location}
-                                  onChange={e => setPostForm({...postForm, location: e.target.value})}
-                              />
-                          </div>
-                      )}
-
-                      <div className="flex gap-2 pt-2">
-                          <button onClick={() => setIsCreatingPost(false)} className="flex-1 bg-white/10 text-white font-bold py-3 rounded-xl">Cancelar</button>
-                          <button onClick={handleCreatePost} disabled={isSaving || (!postForm.content && !postForm.imageUrl)} className="flex-1 bg-neon text-black font-bold py-3 rounded-xl">
-                              {isSaving ? 'Enviando...' : 'Publicar'}
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
       {/* --- TABS --- */}
       <div className="flex border-t border-b border-white/10 mb-4 sticky top-0 bg-pitch-950/80 backdrop-blur z-10">
           <button 
@@ -529,12 +288,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
             className={`flex-1 py-4 text-xs font-bold uppercase tracking-widest ${activeTab === 'squad' ? 'text-white border-b-2 border-white' : 'text-gray-500'}`}
           >
               👥 Elenco
-          </button>
-          <button 
-            onClick={() => setActiveTab('posts')}
-            className={`flex-1 py-4 text-xs font-bold uppercase tracking-widest ${activeTab === 'posts' ? 'text-white border-b-2 border-white' : 'text-gray-500'}`}
-          >
-              📰 Posts
           </button>
           <button 
             onClick={() => setActiveTab('schedule')}
@@ -553,7 +306,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
                   {isOwner && (
                       <div className="flex justify-end px-2">
                           <button className="text-[10px] font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors">
-                              + Adicionar Jogador
+                              + Gerenciar Jogadores
                           </button>
                       </div>
                   )}
@@ -577,48 +330,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, teams, cur
                               {/* Admin Actions */}
                               {isOwner && player.role !== UserRole.OWNER && (
                                   <div className="flex gap-2">
-                                      <button onClick={(e) => handlePromotePlayer(e, player.id)} className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center hover:bg-gold hover:text-black">👑</button>
-                                      <button onClick={(e) => handleRemovePlayer(e, player.id)} className="w-8 h-8 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white">✕</button>
+                                      <button onClick={(e) => handlePromotePlayer(e, player.id)} className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center hover:bg-gold hover:text-black" title="Promover a Dono">👑</button>
+                                      <button onClick={(e) => handleRemovePlayer(e, player.id)} className="w-8 h-8 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white" title="Remover do Time">✕</button>
                                   </div>
                               )}
                           </div>
                       ))}
                       {localTeam.players.length === 0 && <p className="col-span-full text-center text-gray-500 py-8 italic">Nenhum jogador no elenco.</p>}
                   </div>
-              </div>
-          )}
-
-          {/* POSTS TAB (REAL DATA GRID) */}
-          {activeTab === 'posts' && (
-              <div className="grid grid-cols-3 gap-1 animate-fadeIn">
-                  {teamPosts.length === 0 ? (
-                      <div className="col-span-3 text-center py-12 text-gray-500 bg-white/5 rounded-xl">
-                          <span className="text-2xl block mb-2">📸</span>
-                          <p className="text-xs">Ainda não há publicações.</p>
-                      </div>
-                  ) : (
-                      teamPosts.map(post => (
-                          <div 
-                              key={post.id} 
-                              onClick={() => setViewingPost(post)}
-                              className="aspect-square bg-pitch-900 border border-white/5 relative group cursor-pointer overflow-hidden"
-                          >
-                              {post.imageUrl ? (
-                                  <img src={post.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                              ) : (
-                                  <div className="w-full h-full bg-gradient-to-br from-pitch-800 to-black flex items-center justify-center p-2">
-                                      <p className="text-[10px] text-gray-300 text-center line-clamp-3 italic">"{post.content}"</p>
-                                  </div>
-                              )}
-                              
-                              {/* Overlay on hover */}
-                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white font-bold text-xs">
-                                  <span>❤️ {post.likes}</span>
-                                  <span>💬 {post.comments.length}</span>
-                              </div>
-                          </div>
-                      ))
-                  )}
               </div>
           )}
 

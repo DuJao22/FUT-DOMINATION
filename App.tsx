@@ -6,13 +6,12 @@ import { LandingPage } from './components/LandingPage';
 import { NotificationsModal } from './components/NotificationsModal';
 import { TutorialOverlay, TutorialStep } from './components/TutorialOverlay';
 import { MatchLogger } from './components/MatchLogger'; // Keep critical modal eager or lazy based on pref, eager for owner speed
-import { UserRole, User, Team, Match, Territory, Court, PickupGame, Post } from './types';
+import { UserRole, User, Team, Match, Territory, Court, PickupGame } from './types';
 import { dbService } from './services/database';
 
 // --- LAZY LOADED COMPONENTS ---
 // Only load these heavy components when the user actually clicks the tab
 const TerritoryMap = React.lazy(() => import('./components/TerritoryMap').then(m => ({ default: m.TerritoryMap })));
-const Feed = React.lazy(() => import('./components/Feed').then(m => ({ default: m.Feed })));
 const MatchCalendar = React.lazy(() => import('./components/MatchCalendar').then(m => ({ default: m.MatchCalendar })));
 const PickupSoccer = React.lazy(() => import('./components/PickupSoccer').then(m => ({ default: m.PickupSoccer })));
 const TeamManagement = React.lazy(() => import('./components/TeamManagement').then(m => ({ default: m.TeamManagement })));
@@ -54,7 +53,6 @@ const App: React.FC = () => {
   // Lazy Loaded States
   const [matches, setMatches] = useState<Match[]>([]);
   const [pickupGames, setPickupGames] = useState<PickupGame[]>([]);
-  const [posts, setPosts] = useState<Post[]>([]);
 
   // --- 1. INITIALIZATION & SESSION ---
   useEffect(() => {
@@ -101,9 +99,6 @@ const App: React.FC = () => {
 
           // Always fetch fresh data when switching tabs to ensure "Live" feel
           switch (currentTab) {
-              case 'feed':
-                  setPosts(await dbService.getPosts());
-                  break;
               case 'calendar':
               case 'profile':
                   const fMatches = await dbService.getMatches(); 
@@ -173,7 +168,6 @@ const App: React.FC = () => {
       await initCoreData();
       
       // Refresh current tab data regardless of which one it is
-      if (currentTab === 'feed') setPosts(await dbService.getPosts());
       if (currentTab === 'calendar' || currentTab === 'profile') setMatches(await dbService.getMatches());
       if (currentTab === 'pickup' || currentTab === 'calendar') setPickupGames(await dbService.getPickupGames());
       
@@ -326,6 +320,7 @@ const App: React.FC = () => {
   } as Team;
 
   const userRole = activeUser.role;
+  const hasTeam = !!activeUser.teamId && activeUser.teamId !== 'temp_team';
 
   return (
     <div className="min-h-screen bg-pitch-950 bg-mesh bg-fixed font-sans text-gray-100 overflow-x-hidden selection:bg-neon selection:text-black">
@@ -342,6 +337,7 @@ const App: React.FC = () => {
         currentTab={currentTab} 
         setCurrentTab={setCurrentTab} 
         userRole={userRole} 
+        hasTeam={hasTeam}
         onLogout={handleLogout}
       />
 
@@ -350,7 +346,6 @@ const App: React.FC = () => {
           <header className="px-6 pt-16 pb-6 md:pt-8 md:px-8 flex justify-between items-center sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-pitch-950/50 border-b border-white/5">
             <div>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-white uppercase italic tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                {currentTab === 'feed' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Zona do Torcedor</span>}
                 {currentTab === 'calendar' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-500">Meus Jogos</span>}
                 {currentTab === 'pickup' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500">Pelada Local</span>}
                 {currentTab === 'team' && <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon to-green-600">Meu Elenco</span>}
@@ -429,7 +424,6 @@ const App: React.FC = () => {
             <div className="animate-[fadeIn_0.5s_ease-out] px-4 md:px-0">
                 {currentTab === 'pickup' && <PickupSoccer currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
                 {currentTab === 'calendar' && <MatchCalendar matches={matches} teams={teams} pickupGames={pickupGames} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
-                {currentTab === 'feed' && <Feed posts={posts} teams={teams} currentUser={activeUser} />}
                 {currentTab === 'team' && <TeamManagement team={myTeam} teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} onRefreshData={refreshData} />}
                 {currentTab === 'market' && <TransferMarket teams={teams} currentUser={activeUser} onViewPlayer={handleViewPlayer} />}
                 {currentTab === 'profile' && <Profile user={activeUser} matches={matches} onUpdateUser={handleUserUpdate} onLogout={handleLogout} />}
