@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Team, User } from '../types';
 
 interface RankingsProps {
@@ -7,127 +7,23 @@ interface RankingsProps {
 }
 
 export const Rankings: React.FC<RankingsProps> = ({ teams, currentUser }) => {
-  // Updated filter state to include new scopes
-  const [filter, setFilter] = useState<'mundial' | 'nacional' | 'estado' | 'cidade' | 'bairro'>('mundial');
-  
-  // Helper for string normalization (removes accents, lowercase, trim)
-  const normalize = (str?: string) => {
-      return str ? str.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-  };
+  // Filters removed as requested ("tire todos"). 
+  // Now displaying a global ranking of all teams.
 
-  // Determine Reference Location based on Current User
-  const getReferenceLocation = () => {
-      // 1. If user owns/plays for a team, use that team's location
-      if (currentUser?.teamId) {
-          const myTeam = teams.find(t => t.id === currentUser.teamId);
-          if (myTeam?.city && myTeam?.state) {
-              return {
-                  city: myTeam.city,
-                  state: myTeam.state,
-                  neighborhood: myTeam.neighborhood || ''
-              };
-          }
-      }
-
-      // 2. If user is Fan/Free Agent, try to parse from their location string "City - State"
-      if (currentUser?.location && currentUser.location.includes('-')) {
-          const parts = currentUser.location.split('-');
-          return {
-              city: parts[0].trim(),
-              state: parts[1].trim(),
-              neighborhood: '' 
-          };
-      }
-
-      // 3. Fallback (e.g. First team in list or generic)
-      if (teams.length > 0 && teams[0].city) {
-          return {
-              city: teams[0].city,
-              state: teams[0].state || '',
-              neighborhood: teams[0].neighborhood || ''
-          };
-      }
-
-      return { city: 'São Paulo', state: 'SP', neighborhood: 'Centro' };
-  };
-
-  const refLoc = getReferenceLocation();
-
-  const filteredTeams = teams.filter(team => {
-      // Mundial shows everyone
-      if (filter === 'mundial') return true;
-
-      // Nacional shows everyone valid (assuming app is currently BR only)
-      if (filter === 'nacional') return !!team.state;
-
-      // Ensure team has location data for strict filters
-      if (!team.city || !team.state) return false;
-      
-      const tCity = normalize(team.city);
-      const tState = normalize(team.state);
-      const tHood = normalize(team.neighborhood);
-      
-      const rCity = normalize(refLoc.city);
-      const rState = normalize(refLoc.state);
-      const rHood = normalize(refLoc.neighborhood);
-
-      if (filter === 'estado') return tState === rState;
-      if (filter === 'cidade') return tCity === rCity;
-      if (filter === 'bairro') return tCity === rCity && tHood === rHood;
-      
-      return true;
-  });
-
-  // Sort filtered teams by wins
-  const sortedTeams = [...filteredTeams].sort((a, b) => b.wins - a.wins);
+  // Sort all teams by wins
+  const sortedTeams = [...teams].sort((a, b) => b.wins - a.wins);
   const top3 = sortedTeams.slice(0, 3);
   const rest = sortedTeams.slice(3);
-
-  // Helper for dynamic header title
-  const getHeaderTitle = () => {
-      switch(filter) {
-          case 'mundial': return 'Ranking Global';
-          case 'nacional': return 'Brasil';
-          case 'estado': return refLoc.state || 'Estado';
-          case 'cidade': return refLoc.city || 'Cidade';
-          case 'bairro': return refLoc.neighborhood || 'Bairro';
-          default: return 'Ranking';
-      }
-  };
 
   return (
     <div className="space-y-6 pb-24">
       
-      {/* Header Context */}
-      <div className="text-center mb-4 pt-4">
+      {/* Header Context - Cleaned up without filters */}
+      <div className="text-center mb-8 pt-4">
           <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">Classificação Oficial</p>
-          <h2 className="text-3xl font-display font-bold text-white uppercase italic tracking-wide text-glow">
-              {getHeaderTitle()}
+          <h2 className="text-4xl font-display font-bold text-white uppercase italic tracking-wide text-glow">
+              Ranking Geral
           </h2>
-          {filter !== 'mundial' && filter !== 'nacional' && (
-              <p className="text-[10px] text-gray-400 mt-1">
-                  Filtrando por: {filter === 'estado' ? refLoc.state : filter === 'cidade' ? `${refLoc.city} - ${refLoc.state}` : `${refLoc.neighborhood}, ${refLoc.city}`}
-              </p>
-          )}
-      </div>
-
-      {/* Filters Segmented Control - Scrollable on Mobile */}
-      <div className="flex justify-center mb-8 px-4">
-         <div className="bg-pitch-950/80 backdrop-blur-xl rounded-2xl p-1.5 flex gap-1 border border-white/10 shadow-lg relative z-20 overflow-x-auto max-w-full no-scrollbar snap-x">
-            {(['mundial', 'nacional', 'estado', 'cidade', 'bairro'] as const).map(f => (
-               <button 
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-5 py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase transition-all duration-300 whitespace-nowrap snap-center ${
-                      filter === f 
-                      ? 'bg-neon text-pitch-950 shadow-[0_0_15px_rgba(57,255,20,0.4)]' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-               >
-                  {f}
-               </button>
-            ))}
-         </div>
       </div>
 
       {sortedTeams.length === 0 ? (
@@ -135,7 +31,7 @@ export const Rankings: React.FC<RankingsProps> = ({ teams, currentUser }) => {
               <span className="text-4xl block mb-2 opacity-50">🌍</span>
               <p className="text-gray-400 font-bold">Nenhum time encontrado.</p>
               <p className="text-xs text-gray-600 mt-1">
-                  Não há times registrados em <span className="text-neon">{getHeaderTitle()}</span> ainda.
+                  Seja o primeiro a criar um time e entrar no ranking!
               </p>
           </div>
       ) : (
@@ -227,7 +123,7 @@ export const Rankings: React.FC<RankingsProps> = ({ teams, currentUser }) => {
                             <h4 className="text-white font-bold truncate group-hover:text-neon transition-colors">{team.name}</h4>
                             {/* Location Pill */}
                             <span className="bg-green-900/60 text-green-400 border border-green-500/30 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide truncate max-w-[80px]">
-                                {team.neighborhood || team.homeTurf}
+                                {team.neighborhood || team.homeTurf || 'BR'}
                             </span>
                         </div>
                         <p className="text-xs text-gray-500 truncate">Liga {team.category} • {team.players.length} Jogadores</p>
@@ -240,12 +136,6 @@ export const Rankings: React.FC<RankingsProps> = ({ teams, currentUser }) => {
                     </div>
                 </div>
             ))}
-
-            {rest.length === 0 && (
-                <div className="text-center py-8 text-gray-500 text-sm">
-                    Sem mais times no ranking desta região.
-                </div>
-            )}
         </div>
         </>
       )}
