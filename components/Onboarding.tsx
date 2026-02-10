@@ -23,7 +23,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
   const [teamCategory, setTeamCategory] = useState('Adulto/Livre');
   const [teamLogoUrl, setTeamLogoUrl] = useState('');
   
-  // Structured Address State (Mandatory for Ranking)
+  // Structured Address State
   const [cep, setCep] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -47,7 +47,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                   setCity(data.localidade);
                   setState(data.uf);
                   setNeighborhood(data.bairro);
-                  setLocation(`${data.localidade} - ${data.uf}`); // Friendly display name
+                  setLocation(`${data.localidade} - ${data.uf}`);
               } else {
                   alert("CEP não encontrado.");
               }
@@ -66,6 +66,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
 
   const handleFinish = async () => {
       if (!selectedRole) return;
+
       setLoading(true);
 
       const profileData = { name, location, position: selectedRole === UserRole.PLAYER ? position : undefined, shirtNumber: selectedRole === UserRole.PLAYER ? parseInt(shirtNumber) : undefined, avatarUrl };
@@ -73,14 +74,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
       const teamData = selectedRole === UserRole.OWNER ? {
           name: teamName,
           category: teamCategory,
-          homeTurf: `${neighborhood}, ${city}`, // Base display string
-          city: city, // Strict Ranking Filter
-          state: state, // Strict Ranking Filter
-          neighborhood: neighborhood, // Strict Ranking Filter
+          homeTurf: `${neighborhood}, ${city}`,
+          city: city,
+          state: state,
+          neighborhood: neighborhood,
           logoUrl: teamLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random`
       } : undefined;
 
-      const result = await dbService.completeOnboarding(user.id, selectedRole, profileData, teamData);
+      // Ensure subscription status is set correctly (Always active now, as it is free/sponsored)
+      const subStatus = 'active';
+
+      const result = await dbService.completeOnboarding(user.id, selectedRole, profileData, teamData, subStatus);
 
       if (result.success && result.user) {
           onComplete(result.user);
@@ -159,6 +163,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                               </div>
                               <h3 className="text-xl font-bold text-white uppercase">Dono de Time</h3>
                               <p className="text-xs text-gray-400 mt-1">Crie seu clube, gerencie elenco e marque jogos oficiais.</p>
+                              <p className="text-[10px] text-green-400 mt-2 font-bold uppercase tracking-wide">Grátis (Patrocinado)</p>
                           </button>
 
                           <button 
@@ -171,6 +176,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                               </div>
                               <h3 className="text-xl font-bold text-white uppercase">Jogador</h3>
                               <p className="text-xs text-gray-400 mt-1">Entre em elencos, registre suas stats e construa sua carreira.</p>
+                              <p className="text-[10px] text-green-400 mt-2 font-bold uppercase tracking-wide">Grátis</p>
                           </button>
                       </div>
 

@@ -70,6 +70,7 @@ const App: React.FC = () => {
             const storedUserId = localStorage.getItem('fut_dom_user_id');
             if (storedUserId) {
                 const user = await dbService.getUserById(storedUserId);
+                
                 if (user) {
                     setActiveUser(user);
                     setShowLanding(false); 

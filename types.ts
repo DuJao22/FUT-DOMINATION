@@ -22,7 +22,7 @@ export interface User {
   location?: string;
   stats?: PlayerStats;
   badges?: string[];
-  subscriptionActive?: boolean; // For Owners
+  subscriptionStatus?: 'active' | 'inactive' | 'pending';
   following: string[]; // Array of Team IDs the user follows
   
   // Social
@@ -158,8 +158,6 @@ export interface Post {
     location?: string;
   };
 }
-
-export type ImageResolution = '1K' | '2K' | '4K';
 
 // --- NEW NOTIFICATION TYPES ---
 export type NotificationType = 'TRIAL_REQUEST' | 'TEAM_INVITE' | 'NEW_FOLLOWER' | 'SYSTEM' | 'MATCH_INVITE' | 'MATCH_UPDATE' | 'PICKUP_JOIN' | 'PROFILE_LIKE';

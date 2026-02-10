@@ -49,15 +49,19 @@ export class DatabaseService {
     try {
         await this.executeQuery('SELECT 1;'); // Warmup
         
-        // Ensure core tables exist
-        await this.executeQuery(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, role TEXT NOT NULL, team_id TEXT, avatar_url TEXT, bio TEXT, location TEXT, position TEXT, shirt_number INTEGER, onboarding_completed INTEGER DEFAULT 0, likes INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+        // Ensure core tables exist with subscription_status
+        await this.executeQuery(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, role TEXT NOT NULL, team_id TEXT, avatar_url TEXT, bio TEXT, location TEXT, position TEXT, shirt_number INTEGER, onboarding_completed INTEGER DEFAULT 0, likes INTEGER DEFAULT 0, subscription_status TEXT DEFAULT 'inactive', created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
         await this.executeQuery(`CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, logo_url TEXT, bio TEXT, wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0, draws INTEGER DEFAULT 0, territory_color TEXT, owner_id TEXT, category TEXT, home_turf TEXT, city TEXT, state TEXT, neighborhood TEXT, FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL);`);
         await this.executeQuery(`CREATE TABLE IF NOT EXISTS territories (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_team_id TEXT, lat REAL NOT NULL, lng REAL NOT NULL, points INTEGER DEFAULT 0);`);
         await this.executeQuery(`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, type TEXT, title TEXT, message TEXT, related_id TEXT, related_image TEXT, read INTEGER DEFAULT 0, timestamp TEXT, action_data TEXT);`);
         
-        // ... (Other tables assumed to exist or created via similar logic if needed)
-        // Kept minimal for lightness as requested.
-        
+        // Attempt to add column if it doesn't exist (Migration logic)
+        try {
+            await this.executeQuery(`ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'inactive'`);
+        } catch (e) {
+            // Column likely exists
+        }
+
         console.log("✅ Database Ready");
     } catch (error) {
         console.error("❌ Schema Sync Failed.", error);
@@ -79,6 +83,7 @@ export class DatabaseService {
           position: row.position,
           shirtNumber: row.shirt_number,
           likes: row.likes || 0,
+          subscriptionStatus: row.subscription_status || 'inactive',
           stats: { matchesPlayed: row.matches_played || 0, goals: row.goals || 0, mvps: row.mvps || 0, rating: row.rating || 0 },
           badges: row.badges ? row.badges.split(',') : [],
           following: row.following ? row.following.split(',') : []
@@ -138,7 +143,7 @@ export class DatabaseService {
   async registerUser(user: User, password?: string): Promise<boolean> { 
       try { 
           const safeName = this.escape(user.name); 
-          await this.executeQuery(`INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed, likes) VALUES ('${user.id}', '${safeName}', '${user.email}', '${user.role}', '${user.avatarUrl}', '', '${user.location}', 0, 0)`); 
+          await this.executeQuery(`INSERT INTO users (id, name, email, role, avatar_url, bio, location, onboarding_completed, likes, subscription_status) VALUES ('${user.id}', '${safeName}', '${user.email}', '${user.role}', '${user.avatarUrl}', '', '${user.location}', 0, 0, 'inactive')`); 
           await this.executeQuery(`INSERT INTO player_stats (user_id) VALUES ('${user.id}')`);
           return true; 
       } catch (e) { throw e; } 
@@ -150,10 +155,10 @@ export class DatabaseService {
       return null; 
   }
 
-  async completeOnboarding(userId: string, role: UserRole, profileData: any, teamData?: any): Promise<{success: boolean, user?: User}> {
+  async completeOnboarding(userId: string, role: UserRole, profileData: any, teamData?: any, subscriptionStatus = 'inactive'): Promise<{success: boolean, user?: User}> {
       try {
           const safeName = this.escape(profileData.name);
-          let q = `UPDATE users SET name = '${safeName}', location = '${profileData.location}', avatar_url = '${profileData.avatarUrl}', role = '${role}', onboarding_completed = 1`;
+          let q = `UPDATE users SET name = '${safeName}', location = '${profileData.location}', avatar_url = '${profileData.avatarUrl}', role = '${role}', onboarding_completed = 1, subscription_status = '${subscriptionStatus}'`;
           if (role === UserRole.PLAYER) q += `, position = '${profileData.position}', shirt_number = ${profileData.shirtNumber}`;
           q += ` WHERE id = '${userId}'`;
           await this.executeQuery(q);
@@ -166,6 +171,16 @@ export class DatabaseService {
           const updatedUser = await this.getUserById(userId);
           return { success: true, user: updatedUser || undefined };
       } catch (e) { return { success: false }; }
+  }
+
+  async activateSubscription(userId: string): Promise<boolean> {
+      try {
+          await this.executeQuery(`UPDATE users SET subscription_status = 'active' WHERE id = '${userId}'`);
+          return true;
+      } catch (e) {
+          console.error("Subscription update failed", e);
+          return false;
+      }
   }
 
   // --- GAMEPLAY FEATURES ---
